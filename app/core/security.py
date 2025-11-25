@@ -1,9 +1,11 @@
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import jwt
-from config.settings import SECRET_KEY, ALGORITHM
+from app.core.config import settings
+import uuid
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -13,6 +15,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_refresh_token(expires_delta: timedelta = None) -> (str, datetime):
+    """Return (token_string, expires_at)"""
+    token = str(uuid.uuid4())
+    expires = datetime.utcnow() + (expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
+    return token, expires

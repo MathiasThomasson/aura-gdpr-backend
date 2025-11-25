@@ -1,9 +1,17 @@
 from logging.config import fileConfig
+import os
+import sys
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+# add project path so alembic can import app
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# signal to app code that we're running in alembic/autogenerate context
+os.environ.setdefault("ALEMBIC", "1")
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -14,16 +22,39 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# import the app's metadata
+from app.db.database import Base
+from app.core.config import settings
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+# import model modules so that Table objects are registered on Base.metadata
+import app.db.models.user  # noqa: F401
+import app.db.models.refresh_token  # noqa: F401
+import app.db.models.tenant  # noqa: F401
+import app.db.models.processing_activity  # noqa: F401
+import app.db.models.task  # noqa: F401
+import app.db.models.audit_log  # noqa: F401
+import app.db.models.password_reset_token  # noqa: F401
+
+# target_metadata for 'autogenerate' support
+target_metadata = Base.metadata
+
+# Ensure sqlalchemy.url is set from settings (convert async driver to sync where needed)
+db_url = settings.DATABASE_URL
+if db_url is None:
+    # fallback to value in alembic.ini
+    db_url = config.get_main_option("sqlalchemy.url")
+# Normalize async driver URLs to a sync form alembic can use.
+if "+aiosqlite" in db_url:
+    # preserve the file path form (sqlite:///...)
+    sync_db_url = db_url.replace("+aiosqlite", "")
+elif "+" in db_url:
+    # generic conversion: remove the async driver part (e.g. postgresql+asyncpg -> postgresql)
+    parts = db_url.split(":", 1)
+    sync_db_url = db_url.split("+", 1)[0] + ":" + parts[1]
+else:
+    sync_db_url = db_url
+
+config.set_main_option("sqlalchemy.url", sync_db_url)
 
 
 def run_migrations_offline() -> None:

@@ -1,3 +1,11 @@
+/.venv
+venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.vscode/
+/.idea/
 .venv/
 __pycache__/
 *.pyc
