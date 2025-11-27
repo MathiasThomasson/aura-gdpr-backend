@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_event
 from app.core.deps import CurrentContext, current_context
 from app.db.database import get_db
+from app.db.models.processing_activity import ProcessingActivity
 from app.models.processing_activity import ProcessingActivityCreate, ProcessingActivityOut, ProcessingActivityUpdate
 from app.services.processing_activity_service import (
     create_processing_activity as svc_create,
