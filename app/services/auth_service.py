@@ -21,20 +21,53 @@ from app.db.models.user import User
 from app.models.auth import LoginRequest, RegisterRequest
 
 
+async def _generate_unique_tenant_name(db: AsyncSession, email: str) -> str:
+    local = email.split("@")[0] if "@" in email else email
+    base = f"{local} Tenant"
+    candidate = base
+    suffix = 1
+    while True:
+        existing = await db.execute(select(Tenant).where(Tenant.name == candidate))
+        if not existing.scalars().first():
+            return candidate
+        candidate = f"{base} {suffix}"
+        suffix += 1
+
+
+async def _create_tenant_for_email(db: AsyncSession, email: str) -> Tenant:
+    name = await _generate_unique_tenant_name(db, email)
+    tenant = Tenant(name=name)
+    db.add(tenant)
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
+
+
 async def register_user_in_tenant(db: AsyncSession, payload: RegisterRequest) -> User:
-    tenant = await db.get(Tenant, payload.tenant_id)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+    if payload.password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    tenant = None
+    tenant_id = payload.tenant_id
+    created_tenant = False
+    if tenant_id is None:
+        tenant = await _create_tenant_for_email(db, payload.email)
+        tenant_id = tenant.id
+        created_tenant = True
+    else:
+        tenant = await db.get(Tenant, tenant_id)
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    role = payload.role or Role.USER.value
+    role = payload.role or (Role.OWNER.value if created_tenant else Role.USER.value)
     if role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
-        tenant_id=payload.tenant_id,
+        tenant_id=tenant_id,
         role=role,
     )
     db.add(user)
