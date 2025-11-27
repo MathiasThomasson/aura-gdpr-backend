@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 from app.core.roles import ALLOWED_ROLES
 
@@ -14,7 +14,8 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    tenant_id: int
+    confirm_password: str
+    tenant_id: Optional[int] = None  # optional for self-service sign-up
     role: Optional[str] = None
 
     @field_validator("role")
@@ -25,6 +26,12 @@ class RegisterRequest(BaseModel):
         if v not in ALLOWED_ROLES:
             raise ValueError(f"role must be one of {sorted(ALLOWED_ROLES)}")
         return v
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError("password and confirm_password must match")
+        return self
 
 
 class TokenPair(BaseModel):
