@@ -1,13 +1,13 @@
 from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey
 from sqlalchemy.sql import func
-from app.db.database import Base
+
+from app.db.base import Base, TenantBoundMixin
 
 
-class AuditLog(Base):
+class AuditLog(TenantBoundMixin, Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     entity_type = Column(String, nullable=False)
     entity_id = Column(Integer, nullable=True, index=True)

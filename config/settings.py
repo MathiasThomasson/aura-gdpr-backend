@@ -1,10 +1,6 @@
-import os
-from dotenv import load_dotenv
+"""
+Deprecated module retained for backward compatibility.
+Use `app.core.config.settings` instead.
+"""
 
-load_dotenv()
-
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-
-DATABASE_URL = os.getenv("DATABASE_URL")
+from app.core.config import settings  # noqa: F401

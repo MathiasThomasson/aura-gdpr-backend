@@ -1,10 +1,10 @@
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
-from app.core.config import settings
 
-# Always expose Base so models can import it.
-Base = declarative_base()
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.core.config import settings
+from app.db.base import Base
 
 # When running under Alembic autogenerate, skip creating an Async engine
 # because Alembic will import models to inspect metadata and we don't want

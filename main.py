@@ -1,5 +1,10 @@
-from fastapi import FastAPI
-from app.api.routes import auth, users, documents, tenants, processing_activities, tasks, audit_logs
+from fastapi import FastAPI, Request
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.exception_handlers import request_validation_exception_handler as fastapi_request_validation_handler
+from app.api.routes import auth, users, documents, tenants, processing_activities, tasks, audit_logs, ai, rag, gdpr
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
@@ -24,6 +29,18 @@ def create_app() -> FastAPI:
     app.include_router(processing_activities.router)
     app.include_router(tasks.router)
     app.include_router(audit_logs.router)
+    app.include_router(ai.router)
+    app.include_router(rag.router)
+    app.include_router(gdpr.router)
+
+    # Custom validation handler: for the AI analyze endpoint, return 400 instead of 422 when text exceeds max length
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        if request.url.path == "/api/ai/gdpr/analyze":
+            # return 400 so frontends get a client error code for oversized text
+            return JSONResponse(status_code=400, content={"detail": [str(e) for e in exc.errors()]})
+        return await fastapi_request_validation_handler(request, exc)
+
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     @app.get("/health")
     def health():

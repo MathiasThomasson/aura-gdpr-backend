@@ -1,13 +1,15 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
-from app.db.database import Base
 from datetime import datetime
 
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 
-class PasswordResetToken(Base):
+from app.db.base import Base, TenantBoundMixin
+
+
+class PasswordResetToken(TenantBoundMixin, Base):
     __tablename__ = "password_reset_tokens"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False, nullable=False)

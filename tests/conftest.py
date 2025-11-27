@@ -8,6 +8,9 @@ from sqlalchemy.orm import sessionmaker
 ROOT = Path(__file__).resolve().parents[1]
 DB_FILE = ROOT / "dev.db"
 
+# Ensure ALEMBIC env var is not set during tests so `get_db` uses real engine
+os.environ.pop("ALEMBIC", None)
+
 # Remove any previous test DB to ensure clean state
 if DB_FILE.exists():
     try:
@@ -38,10 +41,13 @@ try:
     alembic_cfg = Config(str(ROOT / "alembic.ini"))
     # run migrations to head
     command.upgrade(alembic_cfg, "head")
+    # Unset ALEMBIC env var that may be set during alembic import; this prevents
+    # the app code from thinking it's in an alembic autogenerate context
+    os.environ.pop("ALEMBIC", None)
 except Exception as e:
     # If alembic isn't available, fallback to creating tables using SQLAlchemy metadata.
     try:
-        from app.db.database import Base
+        from app.db.base import Base
         from sqlalchemy import create_engine
 
         # Use sync engine for metadata.create_all
@@ -62,7 +68,7 @@ async def get_test_db():
 # Override FastAPI's get_db dependency to use the test engine
 # This happens at fixture setup time (module import), so the app's dependency
 # overrides will use the test session.
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def setup_test_db_override():
     """Override get_db dependency in the FastAPI app before tests run."""
     from main import app
@@ -72,6 +78,7 @@ def setup_test_db_override():
         async with TestAsyncSession() as session:
             yield session
 
+    # Always (re-)apply the test override before each test to avoid tests clearing overrides
     app.dependency_overrides[get_db] = test_get_db
     yield
     app.dependency_overrides.clear()

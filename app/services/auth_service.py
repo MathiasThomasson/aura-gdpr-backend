@@ -1,0 +1,155 @@
+from datetime import datetime, timedelta, timezone
+import uuid
+from typing import Optional
+
+from fastapi import HTTPException
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.audit import log_event
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+    verify_password,
+)
+from app.core.roles import Role, ALLOWED_ROLES
+from app.db.models.password_reset_token import PasswordResetToken
+from app.db.models.refresh_token import RefreshToken
+from app.db.models.tenant import Tenant
+from app.db.models.user import User
+from app.models.auth import LoginRequest, RegisterRequest
+
+
+async def register_user_in_tenant(db: AsyncSession, payload: RegisterRequest) -> User:
+    tenant = await db.get(Tenant, payload.tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    existing = await db.execute(select(User).where(User.email == payload.email))
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    role = payload.role or Role.USER.value
+    if role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    user = User(
+        email=payload.email,
+        hashed_password=hash_password(payload.password),
+        tenant_id=payload.tenant_id,
+        role=role,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def issue_token_pair(user: User) -> tuple[str, str, datetime, str]:
+    """Return (access_token, refresh_token, refresh_expires, family_id)."""
+    access_token = create_access_token(
+        {"sub": str(user.id), "tenant_id": user.tenant_id, "role": user.role}
+    )
+    refresh_token, refresh_expires = create_refresh_token()
+    family_id = str(uuid.uuid4())
+    return access_token, refresh_token, refresh_expires, family_id
+
+
+async def login_user(db: AsyncSession, payload: LoginRequest) -> tuple[User, str, RefreshToken]:
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalars().first()
+    if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+    if user.tenant_id is None:
+        raise HTTPException(status_code=400, detail="User not assigned to a tenant")
+
+    access_token, refresh_token, refresh_expires, family_id = await issue_token_pair(user)
+    rt = RefreshToken(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        token=refresh_token,
+        family_id=family_id,
+        expires_at=refresh_expires,
+    )
+    db.add(rt)
+    await db.commit()
+    return user, access_token, rt
+
+
+async def refresh_session(db: AsyncSession, refresh_token_str: str) -> tuple[str, RefreshToken]:
+    now = datetime.now(timezone.utc)
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token == refresh_token_str))
+    rt = result.scalars().first()
+    if not rt:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    # Reuse detection: if already revoked or rotated, revoke family and reject
+    if rt.revoked or rt.replaced_by_token:
+        await db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.family_id == rt.family_id)
+            .values(revoked=True, revoked_reason="reuse_detected", last_used_at=now)
+        )
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token reused or revoked")
+    if rt.expires_at < now:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+
+    user = await db.get(User, rt.user_id)
+    if not user or user.tenant_id != rt.tenant_id:
+        raise HTTPException(status_code=401, detail="Invalid token user")
+
+    # Rotate: revoke old, issue new with same family
+    new_refresh, new_expires = create_refresh_token()
+    access_token = create_access_token(
+        {"sub": str(user.id), "tenant_id": user.tenant_id, "role": user.role}
+    )
+    rt.revoked = True
+    rt.revoked_reason = "rotated"
+    rt.replaced_by_token = new_refresh
+    rt.last_used_at = now
+    new_rt = RefreshToken(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        token=new_refresh,
+        family_id=rt.family_id,
+        expires_at=new_expires,
+    )
+    db.add(rt)
+    db.add(new_rt)
+    await db.commit()
+    return access_token, new_rt
+
+
+async def request_password_reset(db: AsyncSession, email: str) -> Optional[str]:
+    """Return reset token for dev/test; production would email it."""
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
+    if not user:
+        return None
+    token = uuid.uuid4().hex
+    expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    pr = PasswordResetToken(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        token=token,
+        expires_at=expires,
+    )
+    db.add(pr)
+    await db.commit()
+    return token
+
+
+async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
+    now = datetime.now(timezone.utc)
+    result = await db.execute(select(PasswordResetToken).where(PasswordResetToken.token == token))
+    pr = result.scalars().first()
+    if not pr or pr.used:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    if pr.expires_at < now:
+        raise HTTPException(status_code=400, detail="Token expired")
+    user = await db.get(User, pr.user_id)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid token user")
+    user.hashed_password = hash_password(new_password)
+    pr.used = True
+    db.add_all([user, pr])
+    await db.commit()
+    await log_event(db, user.tenant_id, user.id, "user", user.id, "password_reset", None)

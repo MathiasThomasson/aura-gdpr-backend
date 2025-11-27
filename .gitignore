@@ -1,12 +1,19 @@
-/.venv
-venv/
+# Python
 __pycache__/
-*.pyc
-.env
-.pytest_cache/
-.vscode/
-/.idea/
+*.py[cod]
+*.egg-info/
 .venv/
-__pycache__/
-*.pyc
-.env
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.DS_Store
+
+# Local artifacts
+dev.db
+.pytest_cache/
+
+# Byte-compiled
+*.pyo

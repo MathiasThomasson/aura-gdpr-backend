@@ -243,3 +243,4 @@ A feature is considered “Done” when:
 4. Wait for my feedback on the plan before you start implementing.
 
 After that, we will work step-by-step according to the plan.
+ChatGPT:

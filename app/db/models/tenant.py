@@ -1,7 +1,7 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
-from sqlalchemy import DateTime
-from app.db.database import Base
+
+from app.db.base import Base
 
 
 class Tenant(Base):

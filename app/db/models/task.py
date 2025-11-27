@@ -1,13 +1,13 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.sql import func
-from app.db.database import Base
+
+from app.db.base import Base, TenantBoundMixin
 
 
-class Task(Base):
+class Task(TenantBoundMixin, Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True)
@@ -16,3 +16,4 @@ class Task(Base):
     assigned_to_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)

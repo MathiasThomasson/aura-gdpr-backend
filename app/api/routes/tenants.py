@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
+from app.core.auth import require_role
+from app.core.security import hash_password
 from app.db.database import get_db
 from app.db.models.tenant import Tenant
 from app.db.models.user import User
 from app.models.user import UserCreate
-from app.core.security import hash_password
-from app.core.auth import require_role
 
 router = APIRouter(prefix="/api/tenants", tags=["Tenants"])
 
@@ -33,7 +34,7 @@ async def register_tenant(payload: TenantRegisterPayload, db: AsyncSession = Dep
     await db.commit()
     await db.refresh(owner)
 
-    return {"tenant": {"id": tenant.id, "name": tenant.name}, "owner": {"id": owner.id, "email": owner.email}}
+    return {"tenant": {"id": tenant.id, "name": tenant.name}, "owner": {"id": owner.id, "email": owner.email, "tenant_id": owner.tenant_id}}
 
 
 @router.put("/{tenant_id}")

@@ -23,7 +23,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # import the app's metadata
-from app.db.database import Base
+from app.db.base import Base
 from app.core.config import settings
 
 # import model modules so that Table objects are registered on Base.metadata
@@ -34,6 +34,10 @@ import app.db.models.processing_activity  # noqa: F401
 import app.db.models.task  # noqa: F401
 import app.db.models.audit_log  # noqa: F401
 import app.db.models.password_reset_token  # noqa: F401
+import app.db.models.knowledge_document  # noqa: F401
+import app.db.models.knowledge_chunk  # noqa: F401
+import app.db.models.document  # noqa: F401
+import app.db.models.knowledge_embedding  # noqa: F401
 
 # target_metadata for 'autogenerate' support
 target_metadata = Base.metadata
