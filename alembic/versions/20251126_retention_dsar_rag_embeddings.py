@@ -1,7 +1,7 @@
 """add dsar/retention fields and embeddings table
 
-Revision ID: 20251126_retention_dsar_rag_embeddings
-Revises: 20251126_documents_and_task_status
+Revision ID: 20251126_retention_embeddings
+Revises: 20251126_docs_tasks_status
 Create Date: 2025-11-26 01:00:00.000000
 """
 from typing import Sequence, Union
@@ -10,8 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = "20251126_retention_dsar_rag_embeddings"
-down_revision: Union[str, None] = "20251126_documents_and_task_status"
+revision: str = "20251126_retention_embeddings"
+down_revision: Union[str, None] = "20251126_docs_tasks_status"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1,7 +1,7 @@
 """add chunk metadata fields
 
 Revision ID: 20251126_rag_chunk_metadata
-Revises: 20251126_retention_dsar_rag_embeddings
+Revises: 20251126_retention_embeddings
 Create Date: 2025-11-26 02:00:00.000000
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "20251126_rag_chunk_metadata"
-down_revision: Union[str, None] = "20251126_retention_dsar_rag_embeddings"
+down_revision: Union[str, None] = "20251126_retention_embeddings"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

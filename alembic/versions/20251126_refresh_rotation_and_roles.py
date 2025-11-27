@@ -1,7 +1,7 @@
 """refresh token rotation fields and role safety
 
-Revision ID: 20251126_refresh_rotation_and_roles
-Revises: 20251126_enforce_tenant_constraints
+Revision ID: 20251126_refresh_rotation
+Revises: 20251126_enforce_tenants
 Create Date: 2025-11-26 00:10:00.000000
 """
 from typing import Sequence, Union
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 import uuid
 
 # revision identifiers, used by Alembic.
-revision: str = "20251126_refresh_rotation_and_roles"
-down_revision: Union[str, None] = "20251126_enforce_tenant_constraints"
+revision: str = "20251126_refresh_rotation"
+down_revision: Union[str, None] = "20251126_enforce_tenants"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

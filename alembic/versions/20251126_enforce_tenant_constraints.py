@@ -1,6 +1,6 @@
 """enforce tenant constraints and bind tokens to tenants
 
-Revision ID: 20251126_enforce_tenant_constraints
+Revision ID: 20251126_enforce_tenants
 Revises: 20251125_upgrade_json_to_jsonb
 Create Date: 2025-11-26 00:00:00.000000
 """
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
-revision: str = "20251126_enforce_tenant_constraints"
+revision: str = "20251126_enforce_tenants"
 down_revision: Union[str, None] = "20251125_upgrade_json_to_jsonb"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -21,6 +21,17 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = inspect(bind)
 
+    # Ensure tenants table exists (defensive for fresh/partial databases)
+    if not inspector.has_table("tenants"):
+        op.create_table(
+            "tenants",
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("name", sa.String(), nullable=False, unique=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
+        )
+        op.create_index(op.f("ix_tenants_id"), "tenants", ["id"], unique=False)
+
     # Ensure password_reset_tokens table exists (legacy gap)
     if not inspector.has_table("password_reset_tokens"):
         op.create_table(
@@ -29,9 +40,16 @@ def upgrade() -> None:
             sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
             sa.Column("token", sa.String(), unique=True, nullable=False, index=True),
             sa.Column("expires_at", sa.DateTime(), nullable=False),
-            sa.Column("used", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+            sa.Column("used", sa.Boolean(), nullable=False, server_default=sa.text("false")),
             sa.Column("created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         )
+    else:
+        # Align default for existing tables to a proper boolean default
+        try:
+            with op.batch_alter_table("password_reset_tokens") as batch:
+                batch.alter_column("used", existing_type=sa.Boolean(), server_default=sa.text("false"), nullable=False)
+        except Exception:
+            pass
 
     # Refresh tokens: add tenant_id and backfill from user
     op.add_column("refresh_tokens", sa.Column("tenant_id", sa.Integer(), nullable=True))

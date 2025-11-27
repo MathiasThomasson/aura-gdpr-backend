@@ -1,7 +1,7 @@
 """add documents table and task status constraint
 
-Revision ID: 20251126_documents_and_task_status
-Revises: 20251126_refresh_rotation_and_roles
+Revision ID: 20251126_docs_tasks_status
+Revises: 20251126_refresh_rotation
 Create Date: 2025-11-26 00:25:00.000000
 """
 from typing import Sequence, Union
@@ -10,8 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = "20251126_documents_and_task_status"
-down_revision: Union[str, None] = "20251126_refresh_rotation_and_roles"
+revision: str = "20251126_docs_tasks_status"
+down_revision: Union[str, None] = "20251126_refresh_rotation"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
