@@ -40,7 +40,6 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True),
         sa.Column("email", sa.String(), nullable=False),
         sa.Column("hashed_password", sa.String(), nullable=False),
         sa.Column("full_name", sa.String(), nullable=True),
@@ -52,7 +51,6 @@ def upgrade() -> None:
     )
     op.create_index("ix_users_id", "users", ["id"], unique=False)
     op.create_index("ix_users_email", "users", ["email"], unique=True)
-    op.create_index("ix_users_tenant_id", "users", ["tenant_id"], unique=False)
 
     # User memberships
     op.create_table(
@@ -161,7 +159,6 @@ def downgrade() -> None:
     op.drop_index("ix_user_tenants_id", table_name="user_tenants")
     op.drop_table("user_tenants")
 
-    op.drop_index("ix_users_tenant_id", table_name="users")
     op.drop_index("ix_users_email", table_name="users")
     op.drop_index("ix_users_id", table_name="users")
     op.drop_table("users")
