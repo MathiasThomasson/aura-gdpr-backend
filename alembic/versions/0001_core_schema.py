@@ -1,7 +1,7 @@
-"""v1 core schema: tenants, users, memberships, tokens, settings, audit logs.
+"""Core schema baseline.
 
-Revision ID: 37b32cd63cfb
-Revises: 
+Revision ID: 0001_core_schema
+Revises:
 Create Date: 2025-11-28 00:00:00.000000
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "37b32cd63cfb"
+revision: str = "0001_core_schema"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
