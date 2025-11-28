@@ -32,8 +32,10 @@ import app.db.models  # noqa: F401
 # target_metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Use the same DB URL as the app (async URL is fine; SQLAlchemy will handle sync driver when appropriate)
+# Use the same DB URL as the app; normalize async driver to sync for Alembic.
 db_url = settings.DATABASE_URL
+if "+asyncpg" in db_url:
+    db_url = db_url.replace("+asyncpg", "")
 config.set_main_option("sqlalchemy.url", db_url)
 
 
