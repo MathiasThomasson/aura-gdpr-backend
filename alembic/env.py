@@ -2,7 +2,7 @@ from logging.config import fileConfig
 import os
 import sys
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
@@ -32,23 +32,9 @@ import app.db.models  # noqa: F401
 # target_metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Ensure sqlalchemy.url is set from settings (convert async driver to sync where needed)
+# Use the same DB URL as the app (async URL is fine; SQLAlchemy will handle sync driver when appropriate)
 db_url = settings.DATABASE_URL
-if db_url is None:
-    # fallback to value in alembic.ini
-    db_url = config.get_main_option("sqlalchemy.url")
-# Normalize async driver URLs to a sync form alembic can use.
-if "+aiosqlite" in db_url:
-    # preserve the file path form (sqlite:///...)
-    sync_db_url = db_url.replace("+aiosqlite", "")
-elif "+" in db_url:
-    # generic conversion: remove the async driver part (e.g. postgresql+asyncpg -> postgresql)
-    parts = db_url.split(":", 1)
-    sync_db_url = db_url.split("+", 1)[0] + ":" + parts[1]
-else:
-    sync_db_url = db_url
-
-config.set_main_option("sqlalchemy.url", sync_db_url)
+config.set_main_option("sqlalchemy.url", db_url)
 
 
 def run_migrations_offline() -> None:
@@ -82,11 +68,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(db_url, poolclass=pool.NullPool, future=True)
 
     with connectable.connect() as connection:
         context.configure(

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 import logging
+from dotenv import load_dotenv
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -7,6 +8,9 @@ from fastapi.exception_handlers import request_validation_exception_handler as f
 from app.api.routes import auth, users, documents, tenants, processing_activities, tasks, audit_logs, ai, rag, gdpr
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+
+# Load .env early so BaseSettings sees it
+load_dotenv()
 
 
 def create_app() -> FastAPI:
