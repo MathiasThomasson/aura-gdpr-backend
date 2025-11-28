@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base, TenantBoundMixin
@@ -9,10 +10,13 @@ class AuditLog(TenantBoundMixin, Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    entity_type = Column(String, nullable=False)
-    entity_id = Column(Integer, nullable=True, index=True)
     action = Column(String, nullable=False)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    # 'metadata' is a reserved attribute name on declarative Base, so use 'meta' as Python attribute
-    metadata = None
-    meta = Column('metadata', JSON, nullable=True)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(String, nullable=True)
+    old_values = Column(JSON, nullable=True)
+    new_values = Column(JSON, nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    user = relationship("User", back_populates="audit_logs")
