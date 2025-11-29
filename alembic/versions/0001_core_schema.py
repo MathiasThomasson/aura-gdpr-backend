@@ -18,12 +18,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Enum for user_tenants.role
-    user_tenant_role = postgresql.ENUM(
-        "owner", "admin", "member", "viewer", name="user_tenant_role", create_type=True
-    )
-    user_tenant_role.create(op.get_bind(), checkfirst=True)
-
     # Tenants
     op.create_table(
         "tenants",
@@ -63,7 +57,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("role", user_tenant_role, nullable=False, server_default="member"),
+        sa.Column("role", sa.String(), nullable=False, server_default="member"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="1"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.UniqueConstraint("user_id", "tenant_id", name="uq_user_tenant"),
@@ -176,5 +170,3 @@ def downgrade() -> None:
     op.drop_index("ix_tenants_slug", table_name="tenants")
     op.drop_index("ix_tenants_id", table_name="tenants")
     op.drop_table("tenants")
-
-    op.execute("DROP TYPE IF EXISTS user_tenant_role CASCADE;")
