@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import re
+import unicodedata
 import uuid
 from typing import Optional
 
@@ -21,6 +23,14 @@ from app.db.models.user import User
 from app.models.auth import LoginRequest, RegisterRequest
 
 
+def slugify(value: str) -> str:
+    value = unicodedata.normalize("NFKD", value)
+    value = value.encode("ascii", "ignore").decode("ascii")
+    value = re.sub(r"[^a-zA-Z0-9]+", "-", value)
+    value = value.strip("-").lower()
+    return value or "tenant"
+
+
 async def _generate_unique_tenant_name(db: AsyncSession, email: str) -> str:
     local = email.split("@")[0] if "@" in email else email
     base = f"{local} Tenant"
@@ -36,7 +46,8 @@ async def _generate_unique_tenant_name(db: AsyncSession, email: str) -> str:
 
 async def _create_tenant_for_email(db: AsyncSession, email: str) -> Tenant:
     name = await _generate_unique_tenant_name(db, email)
-    tenant = Tenant(name=name)
+    slug = slugify(name)
+    tenant = Tenant(name=name, slug=slug)
     db.add(tenant)
     await db.commit()
     await db.refresh(tenant)
