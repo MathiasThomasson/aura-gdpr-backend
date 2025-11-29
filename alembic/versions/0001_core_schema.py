@@ -20,7 +20,18 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # Enum for user_tenants.role
     user_tenant_role = sa.Enum("owner", "admin", "member", "viewer", name="user_tenant_role")
-    user_tenant_role.create(op.get_bind(), checkfirst=True)
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_type WHERE typname = 'user_tenant_role'
+            ) THEN
+                CREATE TYPE user_tenant_role AS ENUM ('owner', 'admin', 'member', 'viewer');
+            END IF;
+        END$$;
+        """
+    )
 
     # Tenants
     op.create_table(
@@ -175,4 +186,4 @@ def downgrade() -> None:
     op.drop_index("ix_tenants_id", table_name="tenants")
     op.drop_table("tenants")
 
-    sa.Enum(name="user_tenant_role").drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS user_tenant_role CASCADE;")
