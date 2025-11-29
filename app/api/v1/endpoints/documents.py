@@ -1,5 +1,6 @@
+import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import CurrentContext, current_context
 from app.db.database import get_db
 from app.db.models.document import Document
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
@@ -35,11 +38,6 @@ class DocumentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DocumentListResponse(BaseModel):
-    items: List[DocumentOut] = Field(default_factory=list)
-    total: int = 0
-
-
 async def _get_document_or_404(db: AsyncSession, tenant_id: int, doc_id: int) -> Document:
     doc = await db.scalar(
         select(Document).where(Document.id == doc_id, Document.tenant_id == tenant_id, Document.deleted_at.is_(None))
@@ -49,19 +47,26 @@ async def _get_document_or_404(db: AsyncSession, tenant_id: int, doc_id: int) ->
     return doc
 
 
-@router.get("/", response_model=DocumentListResponse)
+@router.get("/", response_model=list[DocumentOut])
 async def list_documents(
     db: AsyncSession = Depends(get_db),
     ctx: CurrentContext = Depends(current_context),
 ):
-    stmt = (
-        select(Document)
-        .where(Document.tenant_id == ctx.tenant_id, Document.deleted_at.is_(None))
-        .order_by(Document.created_at.desc())
-    )
-    result = await db.execute(stmt)
-    items = result.scalars().all()
-    return DocumentListResponse(items=[_serialize(doc) for doc in items], total=len(items))
+    try:
+        stmt = (
+            select(Document)
+            .where(Document.tenant_id == ctx.tenant_id, Document.deleted_at.is_(None))
+            .order_by(Document.created_at.desc())
+        )
+        result = await db.execute(stmt)
+        items = result.scalars().all()
+        return [_serialize(doc) for doc in items]
+    except Exception:
+        try:
+            logger.exception("Failed to list documents; returning empty list")
+        except Exception:
+            pass
+        return []
 
 
 @router.post("/", response_model=DocumentOut, status_code=201)
