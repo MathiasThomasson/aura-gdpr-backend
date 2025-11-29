@@ -19,19 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Enum for user_tenants.role
-    user_tenant_role = sa.Enum(name="user_tenant_role", create_type=False)
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_type WHERE typname = 'user_tenant_role'
-            ) THEN
-                CREATE TYPE user_tenant_role AS ENUM ('owner', 'admin', 'member', 'viewer');
-            END IF;
-        END$$;
-        """
+    user_tenant_role = postgresql.ENUM(
+        "owner", "admin", "member", "viewer", name="user_tenant_role", create_type=True
     )
+    user_tenant_role.create(op.get_bind(), checkfirst=True)
 
     # Tenants
     op.create_table(
