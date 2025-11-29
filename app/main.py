@@ -7,6 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes import auth, users, documents, tenants, processing_activities, tasks, audit_logs, ai, rag, gdpr
+from app.api.v1.endpoints import (
+    dashboard,
+    dpia,
+    tasks as tasks_placeholder,
+    projects,
+    documents as documents_placeholder,
+    risk,
+    data_subject_requests,
+)
 from app.core.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -24,6 +33,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.include_router(dashboard.router)
+    app.include_router(dpia.router)
+    app.include_router(tasks_placeholder.router)
+    app.include_router(projects.router)
+    app.include_router(documents_placeholder.router)
+    app.include_router(risk.router)
+    app.include_router(data_subject_requests.router)
 
     app.include_router(auth.router)
     app.include_router(users.router)
