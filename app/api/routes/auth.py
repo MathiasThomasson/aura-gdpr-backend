@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.audit import log_event
+from app.core.auth import get_current_user
 from app.core.security import hash_password
 from app.db.database import get_db
 from app.db.models.user import User
@@ -70,3 +71,13 @@ async def forgot_password(payload: PasswordResetRequest, db: AsyncSession = Depe
 async def reset_password_endpoint(payload: PasswordResetPerform, db: AsyncSession = Depends(get_db)):
     await reset_password(db, payload.token, payload.new_password)
     return {"ok": True}
+
+
+@router.get("/me")
+async def me(current_user=Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "tenant_id": current_user.tenant_id,
+        "role": current_user.role,
+    }
