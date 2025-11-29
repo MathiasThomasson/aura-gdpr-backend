@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.security import hash_password as get_password_hash
 from app.db.models.tenant import Tenant
 from app.db.models.user import User
-from app.db.models.user_tenant import UserTenant, UserTenantRole
+from app.db.models.user_tenant import UserTenant
 
 # Async engine/session factory driven by settings.DATABASE_URL
 engine = create_async_engine(settings.DATABASE_URL, echo=False, future=True)
@@ -62,7 +62,7 @@ async def ensure_user_tenant_membership(session: AsyncSession, user: User, tenan
     membership = UserTenant(
         user_id=user.id,
         tenant_id=tenant.id,
-        role=UserTenantRole.owner,
+        role="owner",
         is_active=True,
     )
     session.add(membership)
