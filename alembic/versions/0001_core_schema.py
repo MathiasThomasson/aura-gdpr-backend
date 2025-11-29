@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Enum for user_tenants.role
-    user_tenant_role = sa.Enum("owner", "admin", "member", "viewer", name="user_tenant_role", create_type=False)
+    user_tenant_role = sa.Enum(name="user_tenant_role", create_type=False)
     op.execute(
         """
         DO $$
