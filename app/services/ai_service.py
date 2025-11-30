@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 import asyncio
@@ -15,9 +16,6 @@ from app.models.ai import GDPRAnalyzeResponse
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
-AI_MODEL = settings.AI_MODEL
-
 # Circuit breaker state (in-memory)
 _cb_failure_count: int = 0
 _cb_open_since: float | None = None
@@ -25,6 +23,54 @@ _cb_last_failure_ts: float | None = None
 _cb_lock: asyncio.Lock = asyncio.Lock()
 _cb_history_max = int(settings.AI_CB_HISTORY_MAX or 50)
 _cb_failure_history: deque = deque(maxlen=_cb_history_max)
+
+
+def _provider() -> str:
+    return (settings.AI_PROVIDER or "ollama").lower()
+
+
+def _base_url(provider: str) -> str:
+    if provider == "ollama":
+        base = os.environ.get("OLLAMA_BASE_URL") or settings.AI_BASE_URL or settings.OLLAMA_BASE_URL or "http://127.0.0.1:11434"
+    else:
+        base = settings.AI_BASE_URL or "https://api.openai.com"
+    return base.rstrip("/")
+
+
+def _build_request(provider: str, prompt: str, base_url: str):
+    model = _model()
+    if provider == "ollama":
+        url = f"{base_url}/api/generate"
+        payload = {"model": model, "prompt": prompt, "stream": False}
+        headers = None
+    else:
+        api_base = base_url
+        if not api_base.endswith("/v1"):
+            api_base = f"{api_base}/v1"
+        url = f"{api_base}/chat/completions"
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+        headers = {"Content-Type": "application/json"}
+        if settings.AI_API_KEY:
+            headers["Authorization"] = f"Bearer {settings.AI_API_KEY}"
+    return url, payload, headers
+
+
+def _extract_text(provider: str, response: httpx.Response) -> str:
+    if provider == "ollama":
+        return response.text
+    try:
+        data = response.json()
+        return data.get("choices", [{}])[0].get("message", {}).get("content", response.text)
+    except Exception:
+        return response.text
+
+
+def _model() -> str:
+    return settings.AI_MODEL
 
 
 async def get_circuit_breaker_status() -> Dict:
@@ -78,7 +124,9 @@ async def analyze_gdpr_text(text: str) -> Dict:
         "3) Svar ska inte innehalla nagot annat an JSON.\n\n"
     )
 
-    payload = {"model": AI_MODEL, "prompt": prompt}
+    provider = _provider()
+    base_url = _base_url(provider)
+    url, payload, headers = _build_request(provider, prompt, base_url)
     max_retries = int(settings.AI_RETRY_ATTEMPTS or 2)
     backoff = float(settings.AI_RETRY_BACKOFF_SECONDS or 0.5)
     resp = None
@@ -95,7 +143,7 @@ async def analyze_gdpr_text(text: str) -> Dict:
         for attempt in range(max_retries + 1):
             try:
                 start = time.perf_counter()
-                resp = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+                resp = await client.post(url, json=payload, headers=headers or None)
                 latency = time.perf_counter() - start
                 break
             except httpx.RequestError as exc:
@@ -108,7 +156,7 @@ async def analyze_gdpr_text(text: str) -> Dict:
                     if _cb_failure_count >= cb_threshold:
                         _cb_open_since = time.time()
                     _cb_failure_history.append({"timestamp": int(_cb_last_failure_ts), "error": str(exc)[:256]})
-                raise HTTPException(status_code=502, detail=f"Could not reach Ollama at {OLLAMA_BASE_URL}: {exc}")
+                raise HTTPException(status_code=502, detail=f"Could not reach {provider} at {base_url}: {exc}")
 
     if resp.status_code != 200:
         async with _cb_lock:
@@ -117,9 +165,9 @@ async def analyze_gdpr_text(text: str) -> Dict:
             if _cb_failure_count >= cb_threshold:
                 _cb_open_since = time.time()
             _cb_failure_history.append({"timestamp": int(_cb_last_failure_ts), "error": f"status={resp.status_code} text={str(resp.text)[:256]}"})
-        raise HTTPException(status_code=502, detail=f"Ollama returned status {resp.status_code}: {resp.text}")
+        raise HTTPException(status_code=502, detail=f"{provider} returned status {resp.status_code}: {resp.text}")
 
-    text_out = resp.text
+    text_out = _extract_text(provider, resp)
     parsed = None
     try:
         parsed = json.loads(text_out)
@@ -228,12 +276,12 @@ async def analyze_gdpr_text(text: str) -> Dict:
         "risks": [r for r in risks if r],
         "recommendations": [r for r in recommendations if r],
         "high_risk": bool(high_risk),
-        "model": AI_MODEL,
+        "model": _model(),
     }
 
     async with _cb_lock:
         _cb_failure_count = 0
         _cb_open_since = None
         _cb_last_failure_ts = None
-    logger.info("AI analyze result: model=%s latency=%.3f summary_len=%d risks=%d recs=%d high_risk=%s", AI_MODEL, latency, len(result["summary"]), len(result["risks"]), len(result["recommendations"]), result["high_risk"])
+    logger.info("AI analyze result: model=%s latency=%.3f summary_len=%d risks=%d recs=%d high_risk=%s", _model(), latency, len(result["summary"]), len(result["risks"]), len(result["recommendations"]), result["high_risk"])
     return result

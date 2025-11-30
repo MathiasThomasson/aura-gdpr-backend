@@ -7,12 +7,13 @@ from app.core.security import hash_password
 from main import app
 
 client = TestClient(app)
+_ollama_url = os.environ.get("AI_BASE_URL") or os.environ.get("OLLAMA_BASE_URL")
 
 
-@pytest.mark.skipif(not os.environ.get("OLLAMA_BASE_URL"), reason="OLLAMA not configured")
+@pytest.mark.skipif(not _ollama_url, reason="OLLAMA not configured")
 def test_ai_integration_and_audit_log():
     # require OLLAMA reachable
-    base = os.environ.get("OLLAMA_BASE_URL")
+    base = _ollama_url
     import requests
     try:
         r = requests.get(f"{base}/api/tags", timeout=2)
@@ -50,6 +51,6 @@ def test_ai_integration_and_audit_log():
     assert row[4] == 'analyze_gdpr_text'
     meta = json.loads(row[5]) if row[5] else {}
     assert meta.get('status') == 'success'
-    assert meta.get('model') == os.environ.get('AI_MODEL', 'llama3.2:1b')
+    assert meta.get('model') == os.environ.get('AI_MODEL', 'gemma:2b')
 
     conn.close()

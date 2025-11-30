@@ -15,7 +15,7 @@ def patch_ai_service(monkeypatch):
             "risks": ["Risk 1", "Risk 2"],
             "recommendations": ["Åtgärd 1", "Åtgärd 2"],
             "high_risk": False,
-            "model": os.environ.get("AI_MODEL", "llama3.2:1b"),
+            "model": os.environ.get("AI_MODEL", "gemma:2b"),
         }
 
     # Patch the function in the router module, because the router imported the symbol at import time

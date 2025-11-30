@@ -3,6 +3,7 @@ import asyncio
 import time
 import logging
 import httpx
+import os
 from typing import Any
 from pydantic import ValidationError
 
@@ -113,7 +114,10 @@ async def analyze_gdpr(
 @router.get("/health")
 async def ollama_health():
     """Return Ollama basic health (tags/models)."""
-    base = settings.OLLAMA_BASE_URL
+    provider = (settings.AI_PROVIDER or "ollama").lower()
+    base = (os.environ.get("OLLAMA_BASE_URL") or settings.AI_BASE_URL or settings.OLLAMA_BASE_URL or "http://127.0.0.1:11434").rstrip("/")
+    if provider != "ollama":
+        return {"status": "ok", "provider": provider, "detail": "health check available only for Ollama provider"}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{base}/api/tags")

@@ -8,7 +8,10 @@ import time
 client = TestClient(app)
 
 
-@pytest.mark.skipif(not os.environ.get("OLLAMA_BASE_URL"), reason="OLLAMA not available")
+_ollama_url = os.environ.get("AI_BASE_URL") or os.environ.get("OLLAMA_BASE_URL")
+
+
+@pytest.mark.skipif(not _ollama_url, reason="OLLAMA not available")
 def test_ollama_health_real():
     r = client.get("/api/ai/health")
     assert r.status_code == 200
@@ -24,7 +27,7 @@ def test_analyze_rate_limit_and_input(monkeypatch):
             "risks": ["R1"],
             "recommendations": ["A1"],
             "high_risk": False,
-            "model": os.environ.get("AI_MODEL", "llama3.2:1b"),
+            "model": os.environ.get("AI_MODEL", "gemma:2b"),
         }
 
     monkeypatch.setattr("app.api.routes.ai.analyze_gdpr_text", fake_analyze)
@@ -98,7 +101,7 @@ def test_ai_audit_input_privacy(monkeypatch):
             "risks": ["R1"],
             "recommendations": ["A1"],
             "high_risk": True,
-            "model": os.environ.get("AI_MODEL", "llama3.2:1b"),
+            "model": os.environ.get("AI_MODEL", "gemma:2b"),
         }
 
     monkeypatch.setattr("app.api.routes.ai.analyze_gdpr_text", fake_analyze)
@@ -150,7 +153,7 @@ def test_ai_audit_input_privacy(monkeypatch):
             "risks": ["R1"],
             "recommendations": ["A1"],
             "high_risk": True,
-            "model": os.environ.get("AI_MODEL", "llama3.2:1b"),
+            "model": os.environ.get("AI_MODEL", "gemma:2b"),
         }
 
     monkeypatch.setattr("app.api.routes.ai.analyze_gdpr_text", fake_analyze)

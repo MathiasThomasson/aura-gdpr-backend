@@ -57,7 +57,7 @@ Required (see `.env.example`):
 - `REFRESH_TOKEN_EXPIRE_DAYS`: refresh token lifetime in days
 - `ENV`: environment name (default `production`)
 - `CORS_ORIGINS`: comma-separated origins or `*`
-- AI-related knobs (OLLAMA_BASE_URL, AI_MODEL, rate limits, circuit breaker, audit flags)
+- AI-related knobs (`AI_PROVIDER`, `AI_BASE_URL`, `AI_MODEL`, rate limits, circuit breaker, audit flags)
 
 ## Auth endpoints (already implemented)
 - `/api/auth/register`

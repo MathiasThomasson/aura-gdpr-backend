@@ -18,9 +18,13 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: Optional[str] = "*"
 
-    # AI / Ollama configuration
-    OLLAMA_BASE_URL: Optional[str] = "http://localhost:11434"
-    AI_MODEL: Optional[str] = "llama3.2:1b"
+    # AI configuration
+    AI_PROVIDER: str = "ollama"
+    AI_BASE_URL: Optional[str] = "http://127.0.0.1:11434"
+    AI_MODEL: Optional[str] = "gemma:2b"
+    AI_API_KEY: Optional[str] = None
+    # Legacy compatibility (deprecated): falls back when AI_BASE_URL is not provided
+    OLLAMA_BASE_URL: Optional[str] = None
     AI_RATE_LIMIT_WINDOW_SECONDS: int = 60
     AI_RATE_LIMIT_MAX_REQUESTS: int = 30
     AI_RATE_LIMIT_TTL_SECONDS: int = 300
