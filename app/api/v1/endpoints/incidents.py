@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-router = APIRouter()
+router = APIRouter(prefix="/api/incidents", tags=["Incidents"])
 
 
-@router.get("/incidents")
+@router.get("")
 async def list_incidents():
     return {"items": []}
