@@ -18,3 +18,4 @@ from app.db.models.document import (  # noqa: F401
     DocumentTag,
     DocumentTagLink,
 )
+from app.db.models.dsr import DataSubjectRequest  # noqa: F401
