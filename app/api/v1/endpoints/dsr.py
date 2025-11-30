@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,8 @@ from app.core.deps import CurrentContext, current_context
 from app.db.database import get_db
 from app.db.models.dsr import DataSubjectRequest
 from app.schemas.dsr import ALLOWED_DSR_STATUSES, DSRCreate, DSROut, DSRUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dsr", tags=["DSR"])
 
@@ -29,12 +32,19 @@ async def _get_dsr_or_404(db: AsyncSession, tenant_id: int, dsr_id: int) -> Data
 
 @router.get("/", response_model=list[DSROut])
 async def list_dsrs(db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)):
-    result = await db.execute(
-        select(DataSubjectRequest)
-        .where(DataSubjectRequest.tenant_id == ctx.tenant_id, DataSubjectRequest.deleted_at.is_(None))
-        .order_by(DataSubjectRequest.received_at.desc())
-    )
-    return result.scalars().all()
+    try:
+        result = await db.execute(
+            select(DataSubjectRequest)
+            .where(DataSubjectRequest.tenant_id == ctx.tenant_id, DataSubjectRequest.deleted_at.is_(None))
+            .order_by(DataSubjectRequest.received_at.desc())
+        )
+        return result.scalars().all()
+    except Exception:
+        try:
+            logger.exception("Failed to list DSRs; returning empty list")
+        except Exception:
+            pass
+    return []
 
 
 @router.post("/", response_model=DSROut, status_code=201)
