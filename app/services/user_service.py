@@ -15,7 +15,14 @@ async def create_user_in_tenant(db: AsyncSession, tenant_id: int, email: str, pa
     role_final = role or "user"
     if role_final not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
-    user = User(email=email, hashed_password=hash_password(password), tenant_id=tenant_id, role=role_final)
+    user = User(
+        email=email,
+        hashed_password=hash_password(password),
+        tenant_id=tenant_id,
+        role=role_final,
+        status="active",
+        is_active=True,
+    )
     db.add(user)
     await db.commit()
     await db.refresh(user)

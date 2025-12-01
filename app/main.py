@@ -12,6 +12,10 @@ from app.api.v1.endpoints import (
     dpia,
     dsr,
     incidents,
+    notifications,
+    ai_audit,
+    billing,
+    iam,
     tasks as tasks_placeholder,
     projects,
     documents as documents_placeholder,
@@ -45,6 +49,10 @@ def create_app() -> FastAPI:
     app.include_router(data_subject_requests.router)
     app.include_router(dsr.router)
     app.include_router(incidents.router)
+    app.include_router(notifications.router)
+    app.include_router(ai_audit.router)
+    app.include_router(billing.router)
+    app.include_router(iam.router)
 
     app.include_router(auth.router)
     app.include_router(users.router)

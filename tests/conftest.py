@@ -44,6 +44,13 @@ try:
     # Unset ALEMBIC env var that may be set during alembic import; this prevents
     # the app code from thinking it's in an alembic autogenerate context
     os.environ.pop("ALEMBIC", None)
+    # Ensure any tables not covered by migrations are created for tests
+    from app.db.base import Base  # noqa: WPS433
+    from sqlalchemy import create_engine  # noqa: WPS433
+
+    sync_url = os.environ["DATABASE_URL"].replace("+aiosqlite", "")
+    sync_engine = create_engine(sync_url)
+    Base.metadata.create_all(bind=sync_engine)
 except Exception as e:
     # If alembic isn't available, fallback to creating tables using SQLAlchemy metadata.
     try:

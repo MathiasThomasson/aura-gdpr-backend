@@ -80,6 +80,8 @@ async def register_user_in_tenant(db: AsyncSession, payload: RegisterRequest) ->
         hashed_password=hash_password(payload.password),
         tenant_id=tenant_id,
         role=role,
+        status="active",
+        is_active=True,
     )
     db.add(user)
     await db.commit()
@@ -104,6 +106,10 @@ async def login_user(db: AsyncSession, payload: LoginRequest) -> tuple[User, str
         raise HTTPException(status_code=400, detail="Invalid credentials")
     if user.tenant_id is None:
         raise HTTPException(status_code=400, detail="User not assigned to a tenant")
+    if getattr(user, "status", "active") == "disabled":
+        raise HTTPException(status_code=403, detail="User is disabled")
+    if getattr(user, "status", "active") == "pending_invite":
+        raise HTTPException(status_code=403, detail="Invitation not accepted yet")
 
     access_token, refresh_token, refresh_expires, family_id = await issue_token_pair(user)
     rt = RefreshToken(
@@ -114,6 +120,8 @@ async def login_user(db: AsyncSession, payload: LoginRequest) -> tuple[User, str
         expires_at=refresh_expires,
     )
     db.add(rt)
+    user.last_login_at = datetime.now(timezone.utc)
+    db.add(user)
     await db.commit()
     return user, access_token, rt
 
