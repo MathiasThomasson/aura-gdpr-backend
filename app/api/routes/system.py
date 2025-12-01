@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime, timezone
 from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,8 +11,10 @@ from app.core.auth import get_current_user
 from app.core.config import settings
 from app.db.database import get_db
 from app.db.models.user import User
+from app.schemas.system import SystemVersion
 
 router = APIRouter(prefix="/api/system", tags=["System"])
+public_router = APIRouter(prefix="/api", tags=["Health"])
 
 
 def _load_average() -> Dict[str, float | None]:
@@ -69,11 +72,16 @@ async def system_health(
     "/version",
     summary="Version info",
     description="Return version, build, and startup timestamp for this deployment.",
+    response_model=SystemVersion,
 )
-async def system_version(request: Request):
+async def system_version(request: Request) -> SystemVersion:
     start_time = getattr(request.app.state, "process_start_time", time.time())
-    return {
-        "version": settings.VERSION,
-        "build": settings.BUILD or "unknown",
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
-    }
+    timestamp = datetime.fromtimestamp(start_time, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    version = getattr(settings, "APP_VERSION", None) or getattr(settings, "VERSION", "1.0.0-rc1")
+    build = getattr(settings, "BUILD_COMMIT", None) or getattr(settings, "BUILD", "dev")
+    return SystemVersion(version=version, build=build, timestamp=timestamp)
+
+
+@public_router.get("/health", summary="Public health", description="Unauthenticated health check.")
+async def public_health() -> Dict[str, str]:
+    return {"status": "ok"}

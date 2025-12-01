@@ -122,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(gdpr.router)
     app.include_router(api_keys.router)
     app.include_router(system.router)
+    app.include_router(system.public_router)
     app.include_router(onboarding.router)
     app.include_router(user_progress.router)
     app.include_router(analytics.router)

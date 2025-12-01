@@ -66,7 +66,10 @@ class Settings(BaseSettings):
 
     # Demo / env metadata
     DEMO_TENANT_ID: Optional[int] = None
-    VERSION: str = "1.0.0-rc1"
+    APP_VERSION: str = "1.0.0-rc1"
+    BUILD_COMMIT: str = "dev"
+    # Legacy compatibility
+    VERSION: Optional[str] = None
     BUILD: Optional[str] = None
 
     class Config:
