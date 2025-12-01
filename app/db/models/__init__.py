@@ -23,3 +23,4 @@ from app.db.models.notification import Notification  # noqa: F401
 from app.db.models.audit_run import AuditRun  # noqa: F401
 from app.db.models.tenant_plan import TenantPlan  # noqa: F401
 from app.db.models.billing_invoice import BillingInvoice  # noqa: F401
+from app.db.models.api_key import ApiKey  # noqa: F401

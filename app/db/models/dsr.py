@@ -16,6 +16,6 @@ class DataSubjectRequest(TenantBoundMixin, Base):
     due_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now())
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now(), index=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)

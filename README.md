@@ -69,3 +69,7 @@ Passwords are hashed with bcrypt; JWT includes `sub`, `tenant_id`, and `role`.
 - Multi-tenant design: tenant_id is required on tenant-bound models.
 - Alembic uses a sync engine; runtime uses async engine.
 - The repository is the single source of truth; the VPS must not be hand-edited.
+
+## Backup & restore
+- Dump: `python scripts/dump_database.py -o backup.dump`
+- Restore: `python scripts/restore_database.py backup.dump`

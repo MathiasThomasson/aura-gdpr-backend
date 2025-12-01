@@ -13,6 +13,7 @@ from app.core.ai_audit import log_ai_call
 from app.core.config import settings
 from app.core.deps import CurrentContext, current_context
 from app.db.database import get_db
+from app.middleware.rate_limit import rate_limit
 from app.models.ai import GDPRAnalyzeRequest, GDPRAnalyzeResponse
 from app.services.ai_service import (
     analyze_gdpr_text,
@@ -55,7 +56,7 @@ from app.services.ai_suite_service import (
     suggest_ropa,
 )
 
-router = APIRouter(prefix="/api/ai", tags=["AI"]) 
+router = APIRouter(prefix="/api/ai", tags=["AI"])
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,8 @@ _rate_limit_state: dict[str, list[float]] = {}
 _RATE_LIMIT_TTL = int(settings.AI_RATE_LIMIT_TTL_SECONDS or 300)
 
 
-@router.post("/gdpr/analyze", response_model=GDPRAnalyzeResponse)
+@router.post("/gdpr/analyze", response_model=GDPRAnalyzeResponse, summary="AI GDPR analyze", description="Analyze GDPR posture of provided text.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def analyze_gdpr(
     req: GDPRAnalyzeRequest,
     request: Request,
@@ -145,8 +147,9 @@ async def analyze_gdpr(
     return response_obj
 
 
-@router.get("/health")
-async def ollama_health():
+@router.get("/health", summary="AI provider health", description="Health check for configured AI provider.")
+@rate_limit("ai", limit=20, window_seconds=60)
+async def ollama_health(request: Request):
     """Return Ollama basic health (tags/models)."""
     provider = (settings.AI_PROVIDER or "ollama").lower()
     base = (os.environ.get("OLLAMA_BASE_URL") or settings.AI_BASE_URL or settings.OLLAMA_BASE_URL or "http://127.0.0.1:11434").rstrip("/")
@@ -165,22 +168,25 @@ async def ollama_health():
         return {"status": "unhealthy", "detail": str(e)}
 
 
-@router.get("/circuit")
-async def ai_circuit_status():
+@router.get("/circuit", summary="AI circuit status", description="Return circuit breaker status for AI calls.")
+@rate_limit("ai", limit=20, window_seconds=60)
+async def ai_circuit_status(request: Request):
     """Return circuit breaker status for AI/Ollama calls."""
     status = await get_circuit_breaker_status()
     return status
 
 
-@router.get("/circuit/history")
-async def ai_circuit_history():
+@router.get("/circuit/history", summary="AI circuit history", description="Return recent circuit breaker failures.")
+@rate_limit("ai", limit=20, window_seconds=60)
+async def ai_circuit_history(request: Request):
     """Return the last failures captured by circuit breaker (read-only)."""
     history = await get_circuit_breaker_history()
     return {"history": history}
 
 
-@router.post("/circuit/reset")
-async def ai_circuit_reset(ctx: CurrentContext = Depends(current_context)):
+@router.post("/circuit/reset", summary="Reset AI circuit", description="Reset AI circuit breaker (admin/owner only).")
+@rate_limit("ai", limit=20, window_seconds=60)
+async def ai_circuit_reset(request: Request, ctx: CurrentContext = Depends(current_context)):
     """Reset the circuit breaker state (clear failure history and counters). Admin only."""
     from app.core.roles import Role
 
@@ -193,82 +199,102 @@ async def ai_circuit_reset(ctx: CurrentContext = Depends(current_context)):
 # === GDPR AI Suite ===
 
 
-@router.post("/dpia/generate", response_model=AIDPIAGenerateResponse, tags=["AI"])
+@router.post("/dpia/generate", response_model=AIDPIAGenerateResponse, tags=["AI"], summary="Generate DPIA", description="Generate a DPIA draft using AI.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_generate_dpia(
     payload: AIDPIAGenerateRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await generate_dpia(ctx.tenant_id, payload)
 
 
-@router.post("/incidents/classify", response_model=AIIncidentClassifyResponse, tags=["AI"])
+@router.post("/incidents/classify", response_model=AIIncidentClassifyResponse, tags=["AI"], summary="Classify incident", description="Classify an incident using AI.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_incident_classify(
     payload: AIIncidentClassifyRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await classify_incident(ctx.tenant_id, payload)
 
 
-@router.post("/ropa/suggest", response_model=AIRopaSuggestResponse, tags=["AI"])
+@router.post("/ropa/suggest", response_model=AIRopaSuggestResponse, tags=["AI"], summary="Suggest ROPA", description="Suggest ROPA entries with AI assistance.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_ropa_suggest(
     payload: AIRopaSuggestRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await suggest_ropa(ctx.tenant_id, payload)
 
 
-@router.post("/toms/recommend", response_model=AITomsRecommendResponse, tags=["AI"])
+@router.post("/toms/recommend", response_model=AITomsRecommendResponse, tags=["AI"], summary="Recommend TOMs", description="Recommend technical and organisational measures.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_toms_recommend(
     payload: AITomsRecommendRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await recommend_toms(ctx.tenant_id, payload)
 
 
-@router.post("/autofill", response_model=AIDocumentAutofillResponse, tags=["AI"])
+@router.post("/autofill", response_model=AIDocumentAutofillResponse, tags=["AI"], summary="Autofill document", description="Autofill document data using AI.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_autofill_document(
     payload: AIDocumentAutofillRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await autofill_document(ctx.tenant_id, payload)
 
 
-@router.post("/risk/evaluate", response_model=AIRiskEvaluateResponse, tags=["AI"])
+@router.post("/risk/evaluate", response_model=AIRiskEvaluateResponse, tags=["AI"], summary="Evaluate risk", description="Evaluate risk using AI.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_risk_evaluate(
     payload: AIRiskEvaluateRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await evaluate_risk(ctx.tenant_id, payload)
 
 
-@router.post("/audit/run-v2", response_model=AIAuditV2Response, tags=["AI"])
+@router.post("/audit/run-v2", response_model=AIAuditV2Response, tags=["AI"], summary="Run AI audit", description="Execute AI-based audit v2.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_audit_run_v2(
     payload: AIAuditV2Request,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     ctx: CurrentContext = Depends(current_context),
 ):
     return await run_audit_v2(db, ctx.tenant_id, payload)
 
 
-@router.post("/mapping", response_model=AIMappingResponse, tags=["AI"])
+@router.post("/mapping", response_model=AIMappingResponse, tags=["AI"], summary="Map modules", description="Map modules to GDPR controls using AI.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_mapping(
     payload: AIMappingRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await map_modules(ctx.tenant_id, payload)
 
 
-@router.post("/explain", response_model=AIExplainResponse, tags=["AI"])
+@router.post("/explain", response_model=AIExplainResponse, tags=["AI"], summary="Explain text", description="Explain provided text with AI assistance.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_explain(
     payload: AIExplainRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await explain_text(ctx.tenant_id, payload)
 
 
-@router.post("/summarize", response_model=AISummarizeResponse, tags=["AI"])
+@router.post("/summarize", response_model=AISummarizeResponse, tags=["AI"], summary="Summarize text", description="Summarize text using AI.")
+@rate_limit("ai", limit=20, window_seconds=60)
 async def ai_summarize(
     payload: AISummarizeRequest,
+    request: Request,
     ctx: CurrentContext = Depends(current_context),
 ):
     return await summarize_text(ctx.tenant_id, payload)

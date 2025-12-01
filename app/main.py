@@ -1,12 +1,15 @@
 import logging
+import time
+from dotenv import load_dotenv
 
-from fastapi import FastAPI, Request
+load_dotenv()
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.exception_handlers import request_validation_exception_handler as fastapi_request_validation_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import auth, users, documents, tenants, processing_activities, tasks, audit_logs, ai, rag, gdpr
+from app.api.routes import auth, users, documents, tenants, processing_activities, tasks, audit_logs, ai, rag, gdpr, api_keys, system
 from app.api.v1.endpoints import (
     dashboard,
     dpia,
@@ -25,8 +28,14 @@ from app.api.v1.endpoints import (
     data_subject_requests,
 )
 from app.core.config import settings
+from app.core.errors import register_error_handlers
+from app.core.logging import configure_logging, request_logging_middleware
+from app.core.security_headers import SecurityHeadersMiddleware
+from app.middleware.rate_limit import rate_limit_dependency
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+configure_logging()
+PROCESS_START_TIME = time.time()
+global_rate_limiter = rate_limit_dependency("global", limit=100, window_seconds=60)
 
 
 def create_app() -> FastAPI:
@@ -41,6 +50,17 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.middleware("http")
+    async def _global_rate_limit(request: Request, call_next):
+        try:
+            await global_rate_limiter(request)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": getattr(exc, "detail", "Too many requests")})
+        return await call_next(request)
+
+    app.middleware("http")(request_logging_middleware)
 
     app.include_router(dashboard.router)
     app.include_router(dpia.router)
@@ -68,6 +88,8 @@ def create_app() -> FastAPI:
     app.include_router(ai.router)
     app.include_router(rag.router)
     app.include_router(gdpr.router)
+    app.include_router(api_keys.router)
+    app.include_router(system.router)
 
     # Custom validation handler: return 400 instead of 422 when text exceeds max length for AI endpoint
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -76,15 +98,17 @@ def create_app() -> FastAPI:
         return await fastapi_request_validation_handler(request, exc)
 
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    register_error_handlers(app)
 
-    @app.get("/health")
+    @app.get("/health", summary="Basic health", description="Unauthenticated liveness probe.")
     def health():
         return {"status": "ok"}
 
-    @app.get("/info")
+    @app.get("/info", summary="App info", description="Basic deployment metadata.")
     def info():
         return {"app": "aura-gdpr-backend"}
 
+    app.state.process_start_time = PROCESS_START_TIME
     return app
 
 

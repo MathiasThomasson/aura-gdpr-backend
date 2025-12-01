@@ -1,13 +1,15 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.core.deps import CurrentContext, current_context
 from app.db.database import get_db
 from app.db.models.dsr import DataSubjectRequest
+from app.middleware.rate_limit import rate_limit
 from app.schemas.dsr import ALLOWED_DSR_STATUSES, DSRCreate, DSROut, DSRUpdate
 
 logger = logging.getLogger(__name__)
@@ -30,11 +32,28 @@ async def _get_dsr_or_404(db: AsyncSession, tenant_id: int, dsr_id: int) -> Data
     return dsr
 
 
-@router.get("/", response_model=list[DSROut])
-async def list_dsrs(db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)):
+@router.get("/", response_model=list[DSROut], summary="List DSRs", description="List data subject requests for the tenant.")
+@rate_limit("public_dsr", limit=10, window_seconds=60)
+async def list_dsrs(request: Request, db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)):
     try:
         result = await db.execute(
             select(DataSubjectRequest)
+            .options(
+                load_only(
+                    DataSubjectRequest.id,
+                    DataSubjectRequest.type,
+                    DataSubjectRequest.data_subject,
+                    DataSubjectRequest.email,
+                    DataSubjectRequest.status,
+                    DataSubjectRequest.received_at,
+                    DataSubjectRequest.due_at,
+                    DataSubjectRequest.completed_at,
+                    DataSubjectRequest.notes,
+                    DataSubjectRequest.created_at,
+                    DataSubjectRequest.updated_at,
+                    DataSubjectRequest.deleted_at,
+                )
+            )
             .where(DataSubjectRequest.tenant_id == ctx.tenant_id, DataSubjectRequest.deleted_at.is_(None))
             .order_by(DataSubjectRequest.received_at.desc())
         )
@@ -47,9 +66,11 @@ async def list_dsrs(db: AsyncSession = Depends(get_db), ctx: CurrentContext = De
     return []
 
 
-@router.post("/", response_model=DSROut, status_code=201)
+@router.post("/", response_model=DSROut, status_code=201, summary="Create DSR", description="Create a data subject request.")
+@rate_limit("public_dsr", limit=10, window_seconds=60)
 async def create_dsr(
     payload: DSRCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     ctx: CurrentContext = Depends(current_context),
 ):
@@ -75,7 +96,7 @@ async def create_dsr(
     return dsr
 
 
-@router.patch("/{dsr_id}", response_model=DSROut)
+@router.patch("/{dsr_id}", response_model=DSROut, summary="Update DSR", description="Update status, notes, or due date for a DSR.")
 async def update_dsr(
     dsr_id: int,
     payload: DSRUpdate,

@@ -14,8 +14,8 @@ class Document(TenantBoundMixin, Base):
     status = Column(String(50), nullable=False, server_default="active")
     current_version = Column(Integer, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now())
-    updated_at = Column(DateTime(timezone=True), nullable=True, server_default=sa.func.now(), onupdate=sa.func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now(), index=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True, server_default=sa.func.now(), onupdate=sa.func.now(), index=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
     tenant = relationship("Tenant")
@@ -38,7 +38,7 @@ class DocumentVersion(Base):
     storage_path = Column(String(512), nullable=True)
     checksum = Column(String(128), nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now(), index=True)
 
     document = relationship("Document", back_populates="versions")
     created_by = relationship("User")
@@ -54,7 +54,7 @@ class DocumentAISummary(Base):
     language = Column(String(10), nullable=False, server_default="en")
     model_name = Column(String(100), nullable=True)
     summary_text = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=sa.func.now(), index=True)
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     document = relationship("Document")

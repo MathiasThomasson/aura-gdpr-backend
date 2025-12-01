@@ -14,6 +14,6 @@ class Task(TenantBoundMixin, Base):
     status = Column(String, nullable=False, default="open")
     category = Column(String, nullable=True)
     assigned_to_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False, index=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)

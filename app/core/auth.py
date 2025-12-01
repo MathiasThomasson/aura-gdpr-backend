@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,7 @@ from app.db.models.user import User
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+async def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     """Resolve the current user and ensure token claims match DB state."""
     credentials_exception = HTTPException(status_code=401, detail="Could not validate credentials")
     try:
@@ -33,6 +33,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     if token_role is not None and user.role != token_role:
         raise credentials_exception
 
+    # Persist context onto request for downstream middlewares/loggers
+    request.state.user = user
+    request.state.user_id = user.id
+    request.state.tenant_id = user.tenant_id
     return user
 
 
