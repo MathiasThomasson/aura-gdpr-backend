@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     # Optional admin override header/token (e.g., for circuit reset)
     ADMIN_OVERRIDE_TOKEN: Optional[str] = None
 
+    # AI provider config
+    AI_PROVIDER: str = "openai"  # openai | local
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4.1-mini"
+    LOCAL_AI_ENDPOINT: Optional[str] = None
+    AI_MAX_TOKENS: int = 1200
+    AI_TEMPERATURE: float = 0.3
+
     # AI safety/logging knobs
     AI_LOGGING_LEVEL: str = "hash"  # none|hash|truncated|full
     AI_MAX_INPUT_CHARS: int = 50000

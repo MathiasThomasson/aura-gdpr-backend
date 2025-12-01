@@ -14,6 +14,8 @@ from app.api.v1.endpoints import (
     incidents,
     notifications,
     ai_audit,
+    ai_policies,
+    ai_qa,
     billing,
     iam,
     tasks as tasks_placeholder,
@@ -51,6 +53,8 @@ def create_app() -> FastAPI:
     app.include_router(incidents.router)
     app.include_router(notifications.router)
     app.include_router(ai_audit.router)
+    app.include_router(ai_policies.router)
+    app.include_router(ai_qa.router)
     app.include_router(billing.router)
     app.include_router(iam.router)
 
