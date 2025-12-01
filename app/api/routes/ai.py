@@ -20,6 +20,40 @@ from app.services.ai_service import (
     get_circuit_breaker_history,
     reset_circuit_breaker,
 )
+from app.schemas.ai_suite import (
+    AIAuditV2Request,
+    AIAuditV2Response,
+    AIDocumentAutofillRequest,
+    AIDocumentAutofillResponse,
+    AIDPIAGenerateRequest,
+    AIDPIAGenerateResponse,
+    AIExplainRequest,
+    AIExplainResponse,
+    AIMappingRequest,
+    AIMappingResponse,
+    AIIncidentClassifyRequest,
+    AIIncidentClassifyResponse,
+    AIRiskEvaluateRequest,
+    AIRiskEvaluateResponse,
+    AIRopaSuggestRequest,
+    AIRopaSuggestResponse,
+    AISummarizeRequest,
+    AISummarizeResponse,
+    AITomsRecommendRequest,
+    AITomsRecommendResponse,
+)
+from app.services.ai_suite_service import (
+    autofill_document,
+    classify_incident,
+    evaluate_risk,
+    explain_text,
+    generate_dpia,
+    map_modules,
+    recommend_toms,
+    run_audit_v2,
+    summarize_text,
+    suggest_ropa,
+)
 
 router = APIRouter(prefix="/api/ai", tags=["AI"]) 
 
@@ -154,3 +188,87 @@ async def ai_circuit_reset(ctx: CurrentContext = Depends(current_context)):
         raise HTTPException(status_code=403, detail="Forbidden")
     await reset_circuit_breaker()
     return {"status": "ok"}
+
+
+# === GDPR AI Suite ===
+
+
+@router.post("/dpia/generate", response_model=AIDPIAGenerateResponse, tags=["AI"])
+async def ai_generate_dpia(
+    payload: AIDPIAGenerateRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await generate_dpia(ctx.tenant_id, payload)
+
+
+@router.post("/incidents/classify", response_model=AIIncidentClassifyResponse, tags=["AI"])
+async def ai_incident_classify(
+    payload: AIIncidentClassifyRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await classify_incident(ctx.tenant_id, payload)
+
+
+@router.post("/ropa/suggest", response_model=AIRopaSuggestResponse, tags=["AI"])
+async def ai_ropa_suggest(
+    payload: AIRopaSuggestRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await suggest_ropa(ctx.tenant_id, payload)
+
+
+@router.post("/toms/recommend", response_model=AITomsRecommendResponse, tags=["AI"])
+async def ai_toms_recommend(
+    payload: AITomsRecommendRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await recommend_toms(ctx.tenant_id, payload)
+
+
+@router.post("/autofill", response_model=AIDocumentAutofillResponse, tags=["AI"])
+async def ai_autofill_document(
+    payload: AIDocumentAutofillRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await autofill_document(ctx.tenant_id, payload)
+
+
+@router.post("/risk/evaluate", response_model=AIRiskEvaluateResponse, tags=["AI"])
+async def ai_risk_evaluate(
+    payload: AIRiskEvaluateRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await evaluate_risk(ctx.tenant_id, payload)
+
+
+@router.post("/audit/run-v2", response_model=AIAuditV2Response, tags=["AI"])
+async def ai_audit_run_v2(
+    payload: AIAuditV2Request,
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await run_audit_v2(db, ctx.tenant_id, payload)
+
+
+@router.post("/mapping", response_model=AIMappingResponse, tags=["AI"])
+async def ai_mapping(
+    payload: AIMappingRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await map_modules(ctx.tenant_id, payload)
+
+
+@router.post("/explain", response_model=AIExplainResponse, tags=["AI"])
+async def ai_explain(
+    payload: AIExplainRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await explain_text(ctx.tenant_id, payload)
+
+
+@router.post("/summarize", response_model=AISummarizeResponse, tags=["AI"])
+async def ai_summarize(
+    payload: AISummarizeRequest,
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await summarize_text(ctx.tenant_id, payload)

@@ -46,6 +46,7 @@ try:
     os.environ.pop("ALEMBIC", None)
     # Ensure any tables not covered by migrations are created for tests
     from app.db.base import Base  # noqa: WPS433
+    import app.db.models  # noqa: F401,WPS433  # register models
     from sqlalchemy import create_engine  # noqa: WPS433
 
     sync_url = os.environ["DATABASE_URL"].replace("+aiosqlite", "")
@@ -55,6 +56,7 @@ except Exception as e:
     # If alembic isn't available, fallback to creating tables using SQLAlchemy metadata.
     try:
         from app.db.base import Base
+        import app.db.models  # noqa: F401  # register models
         from sqlalchemy import create_engine
 
         # Use sync engine for metadata.create_all

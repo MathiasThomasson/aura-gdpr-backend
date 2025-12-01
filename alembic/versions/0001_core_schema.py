@@ -23,15 +23,13 @@ def upgrade() -> None:
         "tenants",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("name", sa.String(), nullable=False),
-        sa.Column("slug", sa.String(), nullable=False),
+        sa.Column("slug", sa.String(), nullable=False, server_default=""),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="1"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
         sa.UniqueConstraint("name", name="uq_tenants_name"),
-        sa.UniqueConstraint("slug", name="uq_tenants_slug"),
     )
     op.create_index("ix_tenants_id", "tenants", ["id"], unique=False)
-    op.create_index("ix_tenants_slug", "tenants", ["slug"], unique=True)
 
     # Users
     op.create_table(
