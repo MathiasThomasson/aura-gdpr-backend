@@ -8,8 +8,25 @@ from fastapi.exception_handlers import request_validation_exception_handler as f
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from jose import jwt
 
-from app.api.routes import auth, users, documents, tenants, processing_activities, tasks, audit_logs, ai, rag, gdpr, api_keys, system
+from app.api.routes import (
+    auth,
+    users,
+    documents,
+    tenants,
+    processing_activities,
+    tasks,
+    audit_logs,
+    ai,
+    rag,
+    gdpr,
+    api_keys,
+    system,
+    onboarding,
+    user_progress,
+    analytics,
+)
 from app.api.v1.endpoints import (
     dashboard,
     dpia,
@@ -53,6 +70,21 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
 
     @app.middleware("http")
+    async def _demo_tenant_guard(request: Request, call_next):
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and settings.DEMO_TENANT_ID is not None:
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header.split(" ", 1)[1]
+                try:
+                    claims = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+                    tenant_id = claims.get("tenant_id")
+                    if tenant_id is not None and int(tenant_id) == int(settings.DEMO_TENANT_ID):
+                        return JSONResponse(status_code=403, content={"detail": "Demo tenant is read-only."})
+                except Exception:
+                    pass
+        return await call_next(request)
+
+    @app.middleware("http")
     async def _global_rate_limit(request: Request, call_next):
         try:
             await global_rate_limiter(request)
@@ -90,6 +122,9 @@ def create_app() -> FastAPI:
     app.include_router(gdpr.router)
     app.include_router(api_keys.router)
     app.include_router(system.router)
+    app.include_router(onboarding.router)
+    app.include_router(user_progress.router)
+    app.include_router(analytics.router)
 
     # Custom validation handler: return 400 instead of 422 when text exceeds max length for AI endpoint
     async def validation_exception_handler(request: Request, exc: RequestValidationError):

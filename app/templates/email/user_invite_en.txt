@@ -1,0 +1,6 @@
+Hello {{ recipient_name }},
+
+You have been invited to join {{ organization_name }}.
+Access your account here: {{ link }}
+
+If you did not expect this invitation, please ignore this email.

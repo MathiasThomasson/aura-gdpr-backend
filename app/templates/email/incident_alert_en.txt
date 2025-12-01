@@ -1,0 +1,6 @@
+Incident Alert for {{ organization_name }}
+
+Title: {{ incident_title }}
+Severity: HIGH
+
+Review details at: {{ link }}

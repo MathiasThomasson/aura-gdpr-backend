@@ -1,0 +1,6 @@
+Hello {{ recipient_name }},
+
+We received your data subject request for {{ organization_name }}.
+Reference link: {{ link }}
+
+Thank you.

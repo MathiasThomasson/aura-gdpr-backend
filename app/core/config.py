@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     RETENTION_DAYS_DOCUMENTS: int = 365
     RETENTION_DAYS_RAG: int = 365
 
+    # Demo / env metadata
+    DEMO_TENANT_ID: Optional[int] = None
+    VERSION: str = "1.0.0-rc1"
+    BUILD: Optional[str] = None
+
     class Config:
         env_file = ".env"
 

@@ -1,0 +1,6 @@
+Hello {{ recipient_name }},
+
+Your data subject request for {{ organization_name }} has been completed.
+You can review the outcome here: {{ link }}
+
+Thank you.

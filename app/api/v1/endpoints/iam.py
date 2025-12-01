@@ -5,6 +5,7 @@ from app.core.deps import CurrentContext, current_context
 from app.db.database import get_db
 from app.schemas.iam import IamUserRead, IamUserUpdate, InviteUserRequest
 from app.services.iam_service import invite_user, list_users, patch_user, to_read_model, update_user
+from app.services.email import send_templated_email
 
 router = APIRouter(prefix="/api/iam/users", tags=["IAM"])
 
@@ -44,6 +45,16 @@ async def invite(
 ):
     _ensure_admin(ctx)
     user = await invite_user(db, ctx.tenant_id, payload)
+    await send_templated_email(
+        to=user.email,
+        subject="You are invited",
+        template="user_invite_en.txt",
+        context={
+            "recipient_name": user.email,
+            "organization_name": str(ctx.tenant_id),
+            "link": "https://app.example.com/invite",
+        },
+    )
     return IamUserRead(**to_read_model(user))
 
 

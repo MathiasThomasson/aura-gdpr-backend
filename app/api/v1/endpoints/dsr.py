@@ -11,6 +11,7 @@ from app.db.database import get_db
 from app.db.models.dsr import DataSubjectRequest
 from app.middleware.rate_limit import rate_limit
 from app.schemas.dsr import ALLOWED_DSR_STATUSES, DSRCreate, DSROut, DSRUpdate
+from app.services.email import send_templated_email
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,15 @@ async def _get_dsr_or_404(db: AsyncSession, tenant_id: int, dsr_id: int) -> Data
     return dsr
 
 
-@router.get("/", response_model=list[DSROut], summary="List DSRs", description="List data subject requests for the tenant.")
+@router.get("/", response_model=list[DSROut], summary="List DSRs", description="List data subject requests for the tenant with optional pagination.")
 @rate_limit("public_dsr", limit=10, window_seconds=60)
-async def list_dsrs(request: Request, db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)):
+async def list_dsrs(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+    limit: int = 50,
+    offset: int = 0,
+):
     try:
         result = await db.execute(
             select(DataSubjectRequest)
@@ -56,6 +63,8 @@ async def list_dsrs(request: Request, db: AsyncSession = Depends(get_db), ctx: C
             )
             .where(DataSubjectRequest.tenant_id == ctx.tenant_id, DataSubjectRequest.deleted_at.is_(None))
             .order_by(DataSubjectRequest.received_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         return result.scalars().all()
     except Exception:
@@ -93,6 +102,17 @@ async def create_dsr(
     db.add(dsr)
     await db.commit()
     await db.refresh(dsr)
+    if payload.email:
+        await send_templated_email(
+            to=payload.email,
+            subject="We received your request",
+            template="dsr_received_en.txt",
+            context={
+                "recipient_name": payload.data_subject,
+                "organization_name": str(ctx.tenant_id),
+                "link": "https://app.example.com/dsr",
+            },
+        )
     return dsr
 
 
@@ -114,6 +134,17 @@ async def update_dsr(
         if new_status in FINAL_STATUSES:
             if status_changed or dsr.completed_at is None:
                 dsr.completed_at = datetime.utcnow()
+                if dsr.email:
+                    await send_templated_email(
+                        to=dsr.email,
+                        subject="Your request is completed",
+                        template="dsr_completed_en.txt",
+                        context={
+                            "recipient_name": dsr.data_subject,
+                            "organization_name": str(ctx.tenant_id),
+                            "link": "https://app.example.com/dsr",
+                        },
+                    )
         else:
             dsr.completed_at = None
 

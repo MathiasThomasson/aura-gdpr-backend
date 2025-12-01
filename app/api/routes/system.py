@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.core.config import settings
 from app.db.database import get_db
 from app.db.models.user import User
 
@@ -61,4 +62,18 @@ async def system_health(
         "uptime_seconds": uptime_seconds,
         "version": "1.0.0",
         "load": load,
+    }
+
+
+@router.get(
+    "/version",
+    summary="Version info",
+    description="Return version, build, and startup timestamp for this deployment.",
+)
+async def system_version(request: Request):
+    start_time = getattr(request.app.state, "process_start_time", time.time())
+    return {
+        "version": settings.VERSION,
+        "build": settings.BUILD or "unknown",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(start_time)),
     }
