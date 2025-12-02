@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: Optional[str] = "*"
+    PUBLIC_FRONTEND_URL: Optional[str] = None
 
     # AI configuration
     AI_PROVIDER: str = "ollama"

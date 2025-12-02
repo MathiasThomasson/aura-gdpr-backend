@@ -28,3 +28,4 @@ from app.db.models.onboarding import OnboardingState  # noqa: F401
 from app.db.models.user_progress import UserProgress  # noqa: F401
 from app.db.models.analytics_event import AnalyticsEvent  # noqa: F401
 from app.db.models.incident import Incident  # noqa: F401
+from app.db.models.tenant_dsr_settings import TenantDSRSettings  # noqa: F401

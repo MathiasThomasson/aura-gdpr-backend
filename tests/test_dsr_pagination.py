@@ -43,9 +43,9 @@ def test_dsr_list_pagination():
     override_user(user_id, tenant_id, "owner")
     for i in range(5):
         payload = {
-            "type": f"type-{i}",
-            "data_subject": f"subject-{i}",
-            "email": email,
+            "request_type": f"type-{i}",
+            "subject_name": f"subject-{i}",
+            "subject_email": email,
             "status": "open",
         }
         resp = client.post("/api/dsr/", json=payload)

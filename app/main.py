@@ -104,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(risk.router)
     app.include_router(data_subject_requests.router)
     app.include_router(dsr.router)
+    app.include_router(dsr.public_router)
     app.include_router(incidents.router)
     app.include_router(notifications.router)
     app.include_router(ai_audit.router)

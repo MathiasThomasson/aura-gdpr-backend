@@ -1,21 +1,27 @@
 import logging
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
 from app.core.deps import CurrentContext, current_context
+from app.core.config import settings
 from app.db.database import get_db
 from app.db.models.dsr import DataSubjectRequest
+from app.db.models.tenant_dsr_settings import TenantDSRSettings
 from app.middleware.rate_limit import rate_limit
 from app.schemas.dsr import ALLOWED_DSR_STATUSES, DSRCreate, DSROut, DSRUpdate
+from app.schemas.dsr import ALLOWED_DSR_PRIORITIES, PublicDSRCreate
 from app.services.email import send_templated_email
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dsr", tags=["DSR"])
+public_router = APIRouter(prefix="/api/public/dsr", tags=["DSR Public"])
 
 FINAL_STATUSES = {"completed", "rejected"}
 
@@ -33,6 +39,62 @@ async def _get_dsr_or_404(db: AsyncSession, tenant_id: int, dsr_id: int) -> Data
     return dsr
 
 
+def _public_base_url() -> str:
+    if settings.PUBLIC_FRONTEND_URL:
+        return settings.PUBLIC_FRONTEND_URL.rstrip("/")
+    if settings.CORS_ORIGINS and settings.CORS_ORIGINS != "*":
+        first_origin = settings.CORS_ORIGINS.split(",")[0].strip()
+        if first_origin:
+            return first_origin.rstrip("/")
+    return "https://app.example.com"
+
+
+def _serialize_public_link(config: TenantDSRSettings) -> dict[str, Optional[str]]:
+    enabled = bool(config.public_dsr_enabled)
+    key = config.public_dsr_key
+    if not key:
+        return {"enabled": False, "public_url": None}
+    base_url = _public_base_url()
+    url = f"{base_url}/public/dsr/{key}" if enabled else None
+    return {"enabled": enabled, "public_url": url}
+
+
+async def _ensure_public_settings_table(db: AsyncSession) -> None:
+    bind = db.get_bind()
+    dialect = getattr(bind, "dialect", None)
+    if dialect and dialect.name.startswith("sqlite"):
+        create_sql = """
+        CREATE TABLE IF NOT EXISTS tenant_dsr_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            public_dsr_key VARCHAR(64),
+            public_dsr_enabled BOOLEAN NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_tenant_dsr_settings_tenant UNIQUE (tenant_id),
+            CONSTRAINT uq_tenant_dsr_settings_key UNIQUE (public_dsr_key),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+        )
+        """
+        await db.execute(text(create_sql))
+        await db.commit()
+    else:
+        await db.run_sync(lambda conn: TenantDSRSettings.__table__.create(bind=conn, checkfirst=True))
+        await db.commit()
+
+
+async def _get_or_create_public_config(db: AsyncSession, tenant_id: int) -> TenantDSRSettings:
+    await _ensure_public_settings_table(db)
+    config = await db.scalar(select(TenantDSRSettings).where(TenantDSRSettings.tenant_id == tenant_id))
+    if config:
+        return config
+    config = TenantDSRSettings(tenant_id=tenant_id, public_dsr_enabled=False, public_dsr_key=None)
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+
 @router.get("/", response_model=list[DSROut], summary="List DSRs", description="List data subject requests for the tenant with optional pagination.")
 @rate_limit("public_dsr", limit=10, window_seconds=60)
 async def list_dsrs(
@@ -48,14 +110,17 @@ async def list_dsrs(
             .options(
                 load_only(
                     DataSubjectRequest.id,
-                    DataSubjectRequest.type,
-                    DataSubjectRequest.data_subject,
-                    DataSubjectRequest.email,
+                    DataSubjectRequest.tenant_id,
+                    DataSubjectRequest.request_type,
+                    DataSubjectRequest.subject_name,
+                    DataSubjectRequest.subject_email,
+                    DataSubjectRequest.priority,
                     DataSubjectRequest.status,
                     DataSubjectRequest.received_at,
-                    DataSubjectRequest.due_at,
+                    DataSubjectRequest.deadline,
                     DataSubjectRequest.completed_at,
-                    DataSubjectRequest.notes,
+                    DataSubjectRequest.description,
+                    DataSubjectRequest.source,
                     DataSubjectRequest.created_at,
                     DataSubjectRequest.updated_at,
                     DataSubjectRequest.deleted_at,
@@ -85,30 +150,34 @@ async def create_dsr(
 ):
     if payload.status not in ALLOWED_DSR_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
+    if payload.priority not in ALLOWED_DSR_PRIORITIES:
+        raise HTTPException(status_code=400, detail="Invalid priority")
 
     completed_at = datetime.utcnow() if payload.status in FINAL_STATUSES else None
     dsr = DataSubjectRequest(
         tenant_id=ctx.tenant_id,
-        type=payload.type,
-        data_subject=payload.data_subject,
-        email=payload.email,
+        request_type=payload.request_type,
+        subject_name=payload.subject_name,
+        subject_email=payload.subject_email,
+        priority=payload.priority,
         status=payload.status,
         received_at=payload.received_at or datetime.utcnow(),
-        due_at=payload.due_at,
+        deadline=payload.deadline,
         completed_at=completed_at,
-        notes=payload.notes,
+        description=payload.description,
+        source=payload.source,
         deleted_at=None,
     )
     db.add(dsr)
     await db.commit()
     await db.refresh(dsr)
-    if payload.email:
+    if payload.subject_email:
         await send_templated_email(
-            to=payload.email,
+            to=payload.subject_email,
             subject="We received your request",
             template="dsr_received_en.txt",
             context={
-                "recipient_name": payload.data_subject,
+                "recipient_name": payload.subject_name,
                 "organization_name": str(ctx.tenant_id),
                 "link": "https://app.example.com/dsr",
             },
@@ -134,13 +203,13 @@ async def update_dsr(
         if new_status in FINAL_STATUSES:
             if status_changed or dsr.completed_at is None:
                 dsr.completed_at = datetime.utcnow()
-                if dsr.email:
+                if dsr.subject_email:
                     await send_templated_email(
-                        to=dsr.email,
+                        to=dsr.subject_email,
                         subject="Your request is completed",
                         template="dsr_completed_en.txt",
                         context={
-                            "recipient_name": dsr.data_subject,
+                            "recipient_name": dsr.subject_name,
                             "organization_name": str(ctx.tenant_id),
                             "link": "https://app.example.com/dsr",
                         },
@@ -148,13 +217,92 @@ async def update_dsr(
         else:
             dsr.completed_at = None
 
-    if payload.notes is not None:
-        dsr.notes = payload.notes
+    if payload.description is not None:
+        dsr.description = payload.description
 
-    if payload.due_at is not None:
-        dsr.due_at = payload.due_at
+    if payload.deadline is not None:
+        dsr.deadline = payload.deadline
+
+    if payload.priority is not None:
+        if payload.priority not in ALLOWED_DSR_PRIORITIES:
+            raise HTTPException(status_code=400, detail="Invalid priority")
+        dsr.priority = payload.priority
 
     db.add(dsr)
     await db.commit()
     await db.refresh(dsr)
     return dsr
+
+
+@router.get("/public-link", summary="Get public DSR link", description="Fetch the public DSR submission link for the current tenant.")
+async def get_public_link(
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    config = await _get_or_create_public_config(db, ctx.tenant_id)
+    return _serialize_public_link(config)
+
+
+@router.post("/public-link/enable", summary="Enable public DSR form", description="Enable the public DSR submission form for the current tenant.")
+async def enable_public_link(
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    config = await _get_or_create_public_config(db, ctx.tenant_id)
+    if not config.public_dsr_key:
+        config.public_dsr_key = uuid.uuid4().hex
+    config.public_dsr_enabled = True
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+    return _serialize_public_link(config)
+
+
+@router.post("/public-link/disable", summary="Disable public DSR form", description="Disable the public DSR submission form without deleting the key.")
+async def disable_public_link(
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    config = await _get_or_create_public_config(db, ctx.tenant_id)
+    config.public_dsr_enabled = False
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+    return _serialize_public_link(config)
+
+
+@public_router.post("/{public_key}", status_code=201, summary="Submit public DSR", description="Public submission endpoint for data subject requests.")
+@rate_limit("public_dsr_submit", limit=5, window_seconds=60)
+async def submit_public_dsr(
+    public_key: str,
+    payload: PublicDSRCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    config = await db.scalar(
+        select(TenantDSRSettings).where(
+            TenantDSRSettings.public_dsr_key == public_key,
+            TenantDSRSettings.public_dsr_enabled.is_(True),
+        )
+    )
+    if not config:
+        raise HTTPException(status_code=404, detail="Public form not found")
+
+    received_at = datetime.utcnow()
+    deadline = received_at + timedelta(days=30)
+    dsr = DataSubjectRequest(
+        tenant_id=config.tenant_id,
+        request_type=payload.request_type,
+        subject_name=payload.subject_name,
+        subject_email=payload.subject_email,
+        description=payload.description,
+        priority=payload.priority,
+        status="received",
+        source="public_form",
+        received_at=received_at,
+        deadline=deadline,
+    )
+    db.add(dsr)
+    await db.commit()
+    await db.refresh(dsr)
+    return {"id": dsr.id, "status": dsr.status, "deadline": dsr.deadline}
