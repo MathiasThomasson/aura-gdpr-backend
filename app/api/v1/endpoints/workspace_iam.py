@@ -38,9 +38,9 @@ async def _require_workspace_admin(membership: UserTenant = Depends(_current_mem
 
 def _to_response(user_tenant: UserTenant, user: User) -> WorkspaceUserListItem:
     return WorkspaceUserListItem(
-        id=user.id,
+        id=user_tenant.id,
+        user_id=user.id,
         email=user.email,
-        tenant_id=user_tenant.tenant_id,
         full_name=user.full_name,
         role=user_tenant.role,
         status="active" if user_tenant.is_active else "disabled",

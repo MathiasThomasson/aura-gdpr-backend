@@ -9,10 +9,11 @@ WorkspaceStatus = Literal["active", "disabled"]
 
 
 class WorkspaceUserBase(BaseModel):
-    id: int
+    id: int  # user_tenant id
+    user_id: int
     email: EmailStr
-    tenant_id: int
     full_name: Optional[str] = None
+    last_login: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -20,7 +21,6 @@ class WorkspaceUserBase(BaseModel):
 class WorkspaceUserListItem(WorkspaceUserBase):
     role: WorkspaceRole
     status: WorkspaceStatus
-    last_login: Optional[datetime] = None
 
 
 class WorkspaceUserInviteRequest(BaseModel):

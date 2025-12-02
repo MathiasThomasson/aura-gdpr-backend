@@ -61,27 +61,34 @@ def _auth_headers(user_id: int, tenant_id: int, role: str):
 
 
 def test_owner_can_list_only_their_tenant_users():
-    tenant_id, owner_id, _, _ = _create_user_with_membership("owner")
+    tenant_id, owner_id, owner_ut_id, _ = _create_user_with_membership("owner")
     # another user in same tenant
-    _, other_user_id, _, _ = _create_user_with_membership("viewer", tenant_id=tenant_id)
+    _, other_user_id, other_ut_id, _ = _create_user_with_membership("viewer", tenant_id=tenant_id)
     # user in different tenant should not appear
-    other_tenant_id, outsider_user_id, _, _ = _create_user_with_membership("user")
+    _, outsider_user_id, outsider_ut_id, _ = _create_user_with_membership("user")
 
     headers = _auth_headers(owner_id, tenant_id, "owner")
     resp = client.get("/api/admin/workspace/users", headers=headers)
     assert resp.status_code == 200
-    ids = {u["id"] for u in resp.json()}
-    assert owner_id in ids
-    assert other_user_id in ids
-    assert outsider_user_id not in ids
-    # verify tenant id matches
-    assert all(u["tenant_id"] == tenant_id for u in resp.json())
-    assert other_tenant_id != tenant_id
+    data = resp.json()
+    membership_ids = {u["id"] for u in data}
+    user_ids = {u["user_id"] for u in data}
+    assert {owner_ut_id, other_ut_id}.issubset(membership_ids)
+    assert outsider_ut_id not in membership_ids
+    assert {owner_id, other_user_id}.issubset(user_ids)
+    assert outsider_user_id not in user_ids
 
 
 def test_non_admin_cannot_access_workspace_iam():
     tenant_id, user_id, _, _ = _create_user_with_membership("user")
     headers = _auth_headers(user_id, tenant_id, "user")
+    resp = client.get("/api/admin/workspace/users", headers=headers)
+    assert resp.status_code == 403
+
+
+def test_viewer_cannot_access_workspace_iam():
+    tenant_id, user_id, _, _ = _create_user_with_membership("viewer")
+    headers = _auth_headers(user_id, tenant_id, "viewer")
     resp = client.get("/api/admin/workspace/users", headers=headers)
     assert resp.status_code == 403
 
@@ -101,17 +108,22 @@ def test_invite_creates_user_tenant_membership():
     assert body["email"] == invite_email
     assert body["role"] == "viewer"
     assert body["status"] == "active"
-    assert body["tenant_id"] == tenant_id
 
     conn = sqlite3.connect("dev.db", timeout=5)
     cur = conn.cursor()
     cur.execute(
-        "SELECT COUNT(*) FROM user_tenants ut JOIN users u ON ut.user_id = u.id WHERE u.email = ? AND ut.tenant_id = ?",
+        "SELECT ut.id, ut.role, ut.is_active, ut.user_id FROM user_tenants ut "
+        "JOIN users u ON ut.user_id = u.id WHERE u.email = ? AND ut.tenant_id = ?",
         (invite_email, tenant_id),
     )
-    count = cur.fetchone()[0]
+    row = cur.fetchone()
     conn.close()
-    assert count == 1
+    assert row is not None
+    ut_id, role, is_active, user_id = row
+    assert body["id"] == ut_id
+    assert body["user_id"] == user_id
+    assert role == "viewer"
+    assert is_active == 1
 
 
 def test_patch_updates_role_and_status():
@@ -128,7 +140,8 @@ def test_patch_updates_role_and_status():
     body = resp.json()
     assert body["role"] == "admin"
     assert body["status"] == "disabled"
-    assert body["id"] == target_user_id
+    assert body["id"] == target_ut_id
+    assert body["user_id"] == target_user_id
 
     conn = sqlite3.connect("dev.db", timeout=5)
     cur = conn.cursor()
