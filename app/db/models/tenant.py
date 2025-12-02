@@ -12,6 +12,8 @@ class Tenant(Base):
     name = Column(String, unique=True, nullable=False)
     slug = Column(String, unique=False, index=True, nullable=True, server_default="")
     is_active = Column(Boolean, nullable=False, server_default="1")
+    plan = Column(String, nullable=False, server_default="free")
+    status = Column(String, nullable=False, server_default="active")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

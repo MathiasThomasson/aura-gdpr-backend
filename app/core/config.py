@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     VERSION: Optional[str] = None
     BUILD: Optional[str] = None
 
+    # Platform admin access
+    PLATFORM_ADMIN_EMAIL: str = "admin@aura-gdpr.se"
+
     class Config:
         env_file = ".env"
 

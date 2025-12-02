@@ -52,3 +52,10 @@ def require_role(*allowed_roles: str):
         return current_user
 
     return _require
+
+
+async def get_platform_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Allow only the configured platform admin email."""
+    if current_user.email.lower() != settings.PLATFORM_ADMIN_EMAIL.lower():
+        raise HTTPException(status_code=403, detail="Platform admin access required")
+    return current_user

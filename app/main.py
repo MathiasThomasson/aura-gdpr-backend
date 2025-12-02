@@ -38,6 +38,8 @@ from app.api.v1.endpoints import (
     ai_qa,
     billing,
     iam,
+    workspace_iam,
+    platform_admin,
     tasks as tasks_placeholder,
     projects,
     documents as documents_placeholder,
@@ -109,6 +111,8 @@ def create_app() -> FastAPI:
     app.include_router(ai_qa.router)
     app.include_router(billing.router)
     app.include_router(iam.router)
+    app.include_router(workspace_iam.router)
+    app.include_router(platform_admin.router)
 
     app.include_router(auth.router)
     app.include_router(users.router)
