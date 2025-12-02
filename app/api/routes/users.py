@@ -32,15 +32,15 @@ async def patch_me(payload: UserUpdate, db: AsyncSession = Depends(get_db), curr
 
 
 @router.get("/")
-async def list_users_route(db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(require_role("owner", "admin"))):
-    users = await list_users(db, ctx.user.tenant_id)
+async def list_users_route(db: AsyncSession = Depends(get_db), current_user=Depends(require_role("owner", "admin"))):
+    users = await list_users(db, current_user.tenant_id)
     return [{"id": u.id, "email": u.email, "role": u.role} for u in users]
 
 
 @router.post("/")
-async def create_user_route(payload: UserCreate, db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(require_role("owner", "admin"))):
-    user = await create_user_in_tenant(db, ctx.user.tenant_id, payload.email, payload.password, payload.role)
-    await log_event(db, ctx.user.tenant_id, ctx.user.id, "user", user.id, "create", None)
+async def create_user_route(payload: UserCreate, db: AsyncSession = Depends(get_db), current_user=Depends(require_role("owner", "admin"))):
+    user = await create_user_in_tenant(db, current_user.tenant_id, payload.email, payload.password, payload.role)
+    await log_event(db, current_user.tenant_id, current_user.id, "user", user.id, "create", None)
     return {"id": user.id, "email": user.email, "role": user.role}
 
 
@@ -48,11 +48,13 @@ async def create_user_route(payload: UserCreate, db: AsyncSession = Depends(get_
 async def patch_user(user_id: int, payload: UserUpdate, db: AsyncSession = Depends(get_db), ctx=Depends(require_role("owner", "admin"))):
     target = await update_user(
         db,
-        tenant_id=ctx.user.tenant_id,
+        tenant_id=ctx.tenant_id if hasattr(ctx, "tenant_id") else ctx.user.tenant_id,
         user_id=user_id,
         email=payload.email,
         password=payload.password,
         role=payload.role if hasattr(payload, "role") else None,
     )
-    await log_event(db, ctx.user.tenant_id, ctx.user.id, "user", target.id, "update", None)
+    tenant_id = ctx.tenant_id if hasattr(ctx, "tenant_id") else ctx.user.tenant_id
+    actor_id = ctx.id if hasattr(ctx, "id") else getattr(ctx, "user", ctx).id
+    await log_event(db, tenant_id, actor_id, "user", target.id, "update", None)
     return {"id": target.id, "email": target.email, "role": target.role}

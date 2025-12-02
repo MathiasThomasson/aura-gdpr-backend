@@ -1,27 +1,38 @@
-from datetime import datetime
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentContext, current_context
+from app.db.database import get_db
+from app.schemas.dpia import DPIACreate, DPIAOut, DPIAUpdate
+from app.services.dpia_service import create_dpia, delete_dpia, get_dpia, list_dpia, update_dpia
 
 router = APIRouter(prefix="/api/dpia", tags=["DPIA"])
 
 
-class DPIAItem(BaseModel):
-    id: Optional[int] = None
-    name: Optional[str] = None
-    owner: Optional[str] = None
-    status: Optional[str] = None
-    updated_at: Optional[datetime] = None
+@router.get("", response_model=list[DPIAOut], summary="List DPIAs")
+async def list_dpia_items(ctx: CurrentContext = Depends(current_context), db: AsyncSession = Depends(get_db)):
+    return await list_dpia(db, ctx.tenant_id)
 
 
-class DPIAListResponse(BaseModel):
-    items: List[DPIAItem] = Field(default_factory=list)
-    total: int = 0
+@router.post("", response_model=DPIAOut, status_code=201, summary="Create DPIA")
+async def create_dpia_item(
+    payload: DPIACreate, ctx: CurrentContext = Depends(current_context), db: AsyncSession = Depends(get_db)
+):
+    return await create_dpia(db, ctx.tenant_id, payload)
 
 
-@router.get("/", response_model=DPIAListResponse)
-async def list_dpia(ctx: CurrentContext = Depends(current_context)):
-    return DPIAListResponse()
+@router.get("/{dpia_id}", response_model=DPIAOut, summary="Get DPIA")
+async def get_dpia_item(dpia_id: int, ctx: CurrentContext = Depends(current_context), db: AsyncSession = Depends(get_db)):
+    return await get_dpia(db, ctx.tenant_id, dpia_id)
+
+
+@router.patch("/{dpia_id}", response_model=DPIAOut, summary="Update DPIA")
+async def update_dpia_item(
+    dpia_id: int, payload: DPIAUpdate, ctx: CurrentContext = Depends(current_context), db: AsyncSession = Depends(get_db)
+):
+    return await update_dpia(db, ctx.tenant_id, dpia_id, payload)
+
+
+@router.delete("/{dpia_id}", summary="Delete DPIA")
+async def delete_dpia_item(dpia_id: int, ctx: CurrentContext = Depends(current_context), db: AsyncSession = Depends(get_db)):
+    return await delete_dpia(db, ctx.tenant_id, dpia_id)

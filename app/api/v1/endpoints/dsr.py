@@ -99,9 +99,12 @@ async def _apply_status_change(
         if reject_same:
             raise HTTPException(status_code=400, detail="Status is unchanged")
         return
+    if dsr.status in FINAL_STATUSES and new_status != dsr.status:
+        raise HTTPException(status_code=400, detail=f"Cannot transition from final status {dsr.status}")
 
     previous_status = dsr.status
     dsr.status = new_status
+    dsr.updated_at = datetime.utcnow()
 
     if new_status in FINAL_STATUSES:
         dsr.completed_at = datetime.utcnow()
@@ -275,6 +278,7 @@ async def create_dsr(
         source=payload.source,
         deleted_at=None,
         created_at=created_at,
+        updated_at=created_at,
     )
     db.add(dsr)
     await db.commit()
@@ -331,6 +335,7 @@ async def update_dsr(
             raise HTTPException(status_code=400, detail="Invalid priority")
         dsr.priority = payload.priority
 
+    dsr.updated_at = datetime.utcnow()
     db.add(dsr)
     await db.commit()
     await db.refresh(dsr)
@@ -405,6 +410,7 @@ async def submit_public_dsr(
         received_at=received_at,
         deadline=deadline,
         created_at=received_at,
+        updated_at=received_at,
     )
     db.add(dsr)
     await db.commit()

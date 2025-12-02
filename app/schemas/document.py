@@ -59,6 +59,7 @@ class DocumentAISummaryRead(BaseModel):
 
 class DocumentBase(BaseModel):
     title: str
+    description: Optional[str] = None
     category: Optional[str] = None
     status: Optional[str] = "active"
     tags: Optional[List[str]] = None  # tag names
@@ -70,6 +71,7 @@ class DocumentCreate(DocumentBase):
 
 class DocumentUpdate(BaseModel):
     title: Optional[str] = None
+    description: Optional[str] = None
     category: Optional[str] = None
     status: Optional[str] = None
     tags: Optional[List[str]] = None
@@ -78,6 +80,7 @@ class DocumentUpdate(BaseModel):
 class DocumentRead(BaseModel):
     id: int
     title: str
+    description: Optional[str] = None
     category: Optional[str] = None
     status: str
     current_version: Optional[int] = None

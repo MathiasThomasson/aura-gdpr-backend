@@ -27,7 +27,7 @@ async def apply_retention(db: AsyncSession) -> dict:
 
     # Audit logs retention
     cutoff_logs = now - timedelta(days=int(settings.RETENTION_DAYS_LOGS or 365))
-    res = await db.execute(delete(AuditLog).where(AuditLog.timestamp < cutoff_logs))
+    res = await db.execute(delete(AuditLog).where(AuditLog.created_at < cutoff_logs))
     summary["audit_logs_deleted"] = res.rowcount or 0
 
     # Documents retention (soft delete purge)

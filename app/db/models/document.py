@@ -10,6 +10,7 @@ class Document(TenantBoundMixin, Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True)
     status = Column(String(50), nullable=False, server_default="active")
     current_version = Column(Integer, nullable=True)

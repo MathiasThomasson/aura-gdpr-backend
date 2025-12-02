@@ -31,6 +31,7 @@ from app.api.v1.endpoints import (
     dashboard,
     dpia,
     dsr,
+    public_dsr,
     incidents,
     notifications,
     ai_audit,
@@ -43,6 +44,10 @@ from app.api.v1.endpoints import (
     tasks as tasks_placeholder,
     projects,
     documents as documents_placeholder,
+    policies,
+    ropa,
+    cookies,
+    toms,
     risk,
     data_subject_requests,
 )
@@ -98,13 +103,17 @@ def create_app() -> FastAPI:
 
     app.include_router(dashboard.router)
     app.include_router(dpia.router)
+    app.include_router(policies.router)
+    app.include_router(ropa.router)
+    app.include_router(cookies.router)
+    app.include_router(toms.router)
     app.include_router(tasks_placeholder.router)
     app.include_router(projects.router)
     app.include_router(documents_placeholder.router)
     app.include_router(risk.router)
     app.include_router(data_subject_requests.router)
     app.include_router(dsr.router)
-    app.include_router(dsr.public_router)
+    app.include_router(public_dsr.router)
     app.include_router(incidents.router)
     app.include_router(notifications.router)
     app.include_router(ai_audit.router)

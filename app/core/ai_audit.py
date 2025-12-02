@@ -31,8 +31,10 @@ async def log_ai_call(db: AsyncSession, tenant_id: Optional[int], user_id: Optio
         meta["error"] = str(error)
 
     level = (settings.AI_LOGGING_LEVEL or "hash").lower()
-    if settings.AI_DISABLE_PROMPT_STORAGE:
+    if settings.AI_DISABLE_PROMPT_STORAGE and not settings.AI_AUDIT_STORE_INPUT:
         level = "hash"
+    if settings.AI_AUDIT_STORE_INPUT and level == "hash":
+        level = "truncated"
     if level == "full" and settings.AI_AUDIT_STORE_INPUT:
         max_len = int(settings.AI_AUDIT_INPUT_MAX_LENGTH or 512)
         truncated = None

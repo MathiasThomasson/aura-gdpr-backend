@@ -53,8 +53,8 @@ def _build_request(provider: str, prompt: str, base_url: str):
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
         }
-        headers = {"Content-Type": "application/json"}
-        if settings.AI_API_KEY:
+        headers = {"Content-Type": "application/json"} if settings.AI_API_KEY else None
+        if headers is not None and settings.AI_API_KEY:
             headers["Authorization"] = f"Bearer {settings.AI_API_KEY}"
     return url, payload, headers
 
@@ -143,7 +143,10 @@ async def analyze_gdpr_text(text: str) -> Dict:
         for attempt in range(max_retries + 1):
             try:
                 start = time.perf_counter()
-                resp = await client.post(url, json=payload, headers=headers or None)
+                post_kwargs = {"json": payload}
+                if headers:
+                    post_kwargs["headers"] = headers
+                resp = await client.post(url, **post_kwargs)
                 latency = time.perf_counter() - start
                 break
             except httpx.RequestError as exc:
@@ -158,6 +161,8 @@ async def analyze_gdpr_text(text: str) -> Dict:
                     _cb_failure_history.append({"timestamp": int(_cb_last_failure_ts), "error": str(exc)[:256]})
                 raise HTTPException(status_code=502, detail=f"Could not reach {provider} at {base_url}: {exc}")
 
+    if resp is None:
+        raise HTTPException(status_code=502, detail="AI provider did not respond")
     if resp.status_code != 200:
         async with _cb_lock:
             _cb_failure_count += 1

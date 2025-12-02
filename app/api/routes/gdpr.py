@@ -45,8 +45,14 @@ async def export_user(user_id: int, db: AsyncSession = Depends(get_db), ctx: Cur
         "user": {"id": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id},
         "tasks": [{"id": t.id, "title": t.title, "status": t.status, "category": t.category, "due_date": t.due_date} for t in tasks],
         "processing_activities": [{"id": p.id, "name": p.name, "description": p.description} for p in pas],
-        "documents": [{"id": d.id, "title": d.title, "category": d.category, "version": d.version} for d in docs],
-        "audit_logs": [{"id": a.id, "entity_type": a.entity_type, "entity_id": a.entity_id, "action": a.action, "timestamp": a.timestamp} for a in audits],
+        "documents": [
+            {"id": d.id, "title": d.title, "category": d.category, "version": getattr(d, "version", getattr(d, "current_version", None))}
+            for d in docs
+        ],
+        "audit_logs": [
+            {"id": a.id, "entity_type": a.entity_type, "entity_id": a.entity_id, "action": a.action, "timestamp": getattr(a, "created_at", None)}
+            for a in audits
+        ],
         "rag_documents": [{"id": d.id, "title": d.title, "source": d.source, "language": d.language} for d in rag_docs],
         "generated_at": datetime.utcnow().isoformat(),
     }
@@ -57,7 +63,7 @@ async def export_tenant(tenant_id: int, db: AsyncSession = Depends(get_db), ctx:
     if tenant_id != ctx.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     tenant = await db.get(Tenant, tenant_id)
-    if not tenant:
+    if not tenant or not getattr(tenant, "is_active", True):
         raise HTTPException(status_code=404, detail="Tenant not found")
     users = (await db.execute(select(User).where(User.tenant_id == tenant_id))).scalars().all()
     tasks = (await db.execute(select(Task).where(Task.tenant_id == tenant_id, Task.deleted_at.is_(None)))).scalars().all()
@@ -71,8 +77,14 @@ async def export_tenant(tenant_id: int, db: AsyncSession = Depends(get_db), ctx:
         "users": [{"id": u.id, "email": u.email, "role": u.role} for u in users],
         "tasks": [{"id": t.id, "title": t.title, "status": t.status, "category": t.category, "due_date": t.due_date} for t in tasks],
         "processing_activities": [{"id": p.id, "name": p.name, "description": p.description} for p in pas],
-        "documents": [{"id": d.id, "title": d.title, "category": d.category, "version": d.version} for d in docs],
-        "audit_logs": [{"id": a.id, "entity_type": a.entity_type, "entity_id": a.entity_id, "action": a.action, "timestamp": a.timestamp} for a in audits],
+        "documents": [
+            {"id": d.id, "title": d.title, "category": d.category, "version": getattr(d, "version", getattr(d, "current_version", None))}
+            for d in docs
+        ],
+        "audit_logs": [
+            {"id": a.id, "entity_type": a.entity_type, "entity_id": a.entity_id, "action": a.action, "timestamp": getattr(a, "created_at", None)}
+            for a in audits
+        ],
         "rag_documents": [{"id": d.id, "title": d.title, "source": d.source, "language": d.language} for d in rag_docs],
         "generated_at": datetime.utcnow().isoformat(),
     }
@@ -101,6 +113,7 @@ async def delete_tenant(tenant_id: int, db: AsyncSession = Depends(get_db), ctx:
     if tenant_id != ctx.tenant_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     now = datetime.utcnow()
+    tenant = await db.get(Tenant, tenant_id)
     # anonymize all users
     users = (await db.execute(select(User).where(User.tenant_id == tenant_id))).scalars().all()
     for u in users:
@@ -111,6 +124,9 @@ async def delete_tenant(tenant_id: int, db: AsyncSession = Depends(get_db), ctx:
     await db.execute(update(Document).where(Document.tenant_id == tenant_id).values(deleted_at=now))
     # hard delete rag docs/chunks for tenant
     await delete_rag_for_tenant(db, tenant_id)
+    if tenant:
+        tenant.is_active = False
+        db.add(tenant)
     await db.commit()
     await log_event(db, ctx.tenant_id, ctx.user.id, "dsar", tenant_id, "tenant_anonymized", {"tenant": tenant_id})
     return {"ok": True}

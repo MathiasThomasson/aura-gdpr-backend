@@ -36,8 +36,8 @@ async def create_document(
 
 
 async def ingest_document(db: AsyncSession, doc: KnowledgeDocument, tenant_id: int):
-    normalized = normalize_text(doc.content or "")
-    chunks = chunk_text(normalized, overlap_ratio=0.15)
+    source_text = doc.content or ""
+    chunks = chunk_text(source_text, overlap_ratio=0.15)
     created_chunks = []
     embeddings = []
     for text, idx, section_title in chunks:
@@ -111,10 +111,7 @@ async def search(db: AsyncSession, tenant_id: int, query: str, top_k: int = 5):
         score = cosine_similarity(query_vec, emb.vector)
         results.append((score, chunk, emb))
     results.sort(key=lambda x: x[0], reverse=True)
-    # apply soft threshold
-    threshold = 0.2
-    filtered = [r for r in results if r[0] >= threshold]
-    return filtered[:top_k]
+    return results[:top_k]
 
 
 async def delete_rag_for_tenant(db: AsyncSession, tenant_id: int):

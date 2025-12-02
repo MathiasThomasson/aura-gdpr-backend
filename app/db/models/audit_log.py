@@ -17,6 +17,8 @@ class AuditLog(TenantBoundMixin, Base):
     new_values = Column(JSON, nullable=True)
     ip_address = Column(String, nullable=True)
     user_agent = Column(String, nullable=True)
+    metadata_json = Column("metadata", JSON, nullable=True)
+    meta = Column("meta", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
     user = relationship("User", back_populates="audit_logs")

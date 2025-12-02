@@ -11,8 +11,8 @@ async def log_event(db: AsyncSession, tenant_id: int, user_id: int | None, entit
         entity_type=entity_type,
         entity_id=str(entity_id) if entity_id is not None else None,
         action=action,
-        # If you need to persist details, map them to old_values/new_values or extend the model/migration.
-        # Here we ignore meta to avoid invalid constructor args.
+        metadata_json=safe_meta,
+        meta=safe_meta,
     )
     db.add(al)
     await db.commit()

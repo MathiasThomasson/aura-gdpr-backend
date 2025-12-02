@@ -30,7 +30,7 @@ async def list_audit_logs(
         q = q.where(AuditLog.action == action)
     if user_id:
         q = q.where(AuditLog.user_id == user_id)
-    q = q.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit)
+    q = q.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(q)
     items = result.scalars().all()
     return items

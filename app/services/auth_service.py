@@ -137,11 +137,15 @@ async def refresh_session(db: AsyncSession, refresh_token_str: str) -> tuple[str
         await db.execute(
             update(RefreshToken)
             .where(RefreshToken.family_id == rt.family_id)
+            .where(RefreshToken.token != rt.replaced_by_token)
             .values(revoked=True, revoked_reason="reuse_detected", last_used_at=now)
         )
         await db.commit()
         raise HTTPException(status_code=401, detail="Refresh token reused or revoked")
-    if rt.expires_at < now:
+    rt_expires = rt.expires_at
+    if rt_expires.tzinfo is None:
+        rt_expires = rt_expires.replace(tzinfo=timezone.utc)
+    if rt_expires < now:
         raise HTTPException(status_code=401, detail="Refresh token expired")
 
     user = await db.get(User, rt.user_id)
@@ -195,7 +199,10 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
     pr = result.scalars().first()
     if not pr or pr.used:
         raise HTTPException(status_code=400, detail="Invalid token")
-    if pr.expires_at < now:
+    pr_expires = pr.expires_at
+    if pr_expires.tzinfo is None:
+        pr_expires = pr_expires.replace(tzinfo=timezone.utc)
+    if pr_expires < now:
         raise HTTPException(status_code=400, detail="Token expired")
     user = await db.get(User, pr.user_id)
     if not user:

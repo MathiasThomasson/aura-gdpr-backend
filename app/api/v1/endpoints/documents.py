@@ -18,11 +18,15 @@ router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
 class DocumentCreate(BaseModel):
     title: str = Field(..., max_length=255)
+    description: Optional[str] = None
+    status: Optional[str] = None
     type: Optional[str] = Field(None, max_length=100)
 
 
 class DocumentUpdate(BaseModel):
     title: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    status: Optional[str] = None
     type: Optional[str] = Field(None, max_length=100)
 
 
@@ -30,6 +34,8 @@ class DocumentOut(BaseModel):
     id: int
     tenant_id: int
     title: str
+    description: Optional[str]
+    status: Optional[str]
     type: Optional[str]
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
@@ -69,7 +75,7 @@ async def list_documents(
         return []
 
 
-@router.post("/", response_model=DocumentOut, status_code=201)
+@router.post("/", response_model=DocumentOut)
 async def create_document(
     payload: DocumentCreate,
     db: AsyncSession = Depends(get_db),
@@ -78,7 +84,9 @@ async def create_document(
     doc = Document(
         tenant_id=ctx.tenant_id,
         title=payload.title,
+        description=payload.description,
         category=payload.type,
+        status=payload.status or "active",
         deleted_at=None,
     )
     db.add(doc)
@@ -107,6 +115,10 @@ async def update_document(
     doc = await _get_document_or_404(db, ctx.tenant_id, doc_id)
     if payload.title is not None:
         doc.title = payload.title
+    if payload.description is not None:
+        doc.description = payload.description
+    if payload.status is not None:
+        doc.status = payload.status
     if payload.type is not None:
         doc.category = payload.type
     db.add(doc)
@@ -134,6 +146,8 @@ def _serialize(doc: Document) -> DocumentOut:
         id=doc.id,
         tenant_id=doc.tenant_id,
         title=doc.title,
+        description=doc.description,
+        status=doc.status,
         type=doc.category,
         created_at=doc.created_at,
         updated_at=doc.updated_at,

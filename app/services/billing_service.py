@@ -9,6 +9,7 @@ from app.db.models.audit_run import AuditRun
 from app.db.models.billing_invoice import BillingInvoice
 from app.db.models.document import Document
 from app.db.models.dsr import DataSubjectRequest
+from app.db.models.tenant import Tenant
 from app.db.models.tenant_plan import TenantPlan
 from app.schemas.billing import BillingInvoiceRead, BillingPlanRead, BillingUsageRead
 
@@ -40,13 +41,21 @@ async def _get_or_create_plan(db: AsyncSession, tenant_id: int) -> TenantPlan:
     return plan
 
 
+async def _is_test_tenant(db: AsyncSession, tenant_id: int) -> bool:
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+    return bool(getattr(tenant, "is_test_tenant", False)) if tenant else False
+
+
 async def get_plan(db: AsyncSession, tenant_id: int) -> BillingPlanRead:
+    is_test = await _is_test_tenant(db, tenant_id)
     plan = await _get_or_create_plan(db, tenant_id)
     trial_days_left = None
     if plan.trial_ends_at:
         delta = plan.trial_ends_at - datetime.now(timezone.utc)
         trial_days_left = max(0, int(delta.days))
-    features_raw = plan.features or DEFAULT_FEATURES.get(plan.plan_type, [])
+    effective_type = "pro" if is_test else plan.plan_type
+    effective_name = "Pro (test)" if is_test else plan.name
+    features_raw = plan.features or DEFAULT_FEATURES.get(effective_type, [])
     if isinstance(features_raw, str):
         try:
             import json
@@ -56,12 +65,12 @@ async def get_plan(db: AsyncSession, tenant_id: int) -> BillingPlanRead:
             features_raw = [features_raw]
     features = list(features_raw)
     return BillingPlanRead(
-        type=plan.plan_type,
-        name=plan.name,
-        price_per_month=plan.price_per_month,
+        type=effective_type,
+        name=effective_name,
+        price_per_month=0 if is_test else plan.price_per_month,
         currency=plan.currency,
-        is_trial=plan.is_trial,
-        trial_days_left=trial_days_left,
+        is_trial=False if is_test else plan.is_trial,
+        trial_days_left=None if is_test else trial_days_left,
         features=list(features),
     )
 

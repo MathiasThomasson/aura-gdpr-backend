@@ -4,12 +4,14 @@ from datetime import datetime, timezone
 from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
+from app.core.deps import CurrentContext, current_context
 from app.core.config import settings
 from app.db.database import get_db
+from app.db.models.tenant import Tenant
 from app.db.models.user import User
 from app.schemas.system import SystemVersion
 
@@ -80,6 +82,23 @@ async def system_version(request: Request) -> SystemVersion:
     version = getattr(settings, "APP_VERSION", None) or getattr(settings, "VERSION", "1.0.0-rc1")
     build = getattr(settings, "BUILD_COMMIT", None) or getattr(settings, "BUILD", "dev")
     return SystemVersion(version=version, build=build, timestamp=timestamp)
+
+
+@router.get(
+    "/tenant-status",
+    summary="Tenant status",
+    description="Return the current tenant's plan, including test-mode override for AI endpoints.",
+)
+async def tenant_status(
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    tenant = await db.scalar(select(Tenant).where(Tenant.id == ctx.tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    is_test = bool(getattr(tenant, "is_test_tenant", False))
+    plan = "pro" if is_test else getattr(tenant, "plan", "free") or "free"
+    return {"tenant_id": ctx.tenant_id, "plan": plan, "is_test_tenant": is_test}
 
 
 @public_router.get("/health", summary="Public health", description="Unauthenticated health check.")

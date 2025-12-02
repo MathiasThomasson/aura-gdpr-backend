@@ -8,7 +8,13 @@ from app.schemas.ai_qa import AiAnswerSource
 async def rag_search(tenant_id: int, question: str, limit: int, db) -> List[AiAnswerSource]:
     results = await rag_service.search(db, tenant_id, question, top_k=limit)
     sources: List[AiAnswerSource] = []
-    for score, chunk, emb in results:
+    for item in results:
+        if len(item) == 3:
+            score, chunk, emb = item
+        elif len(item) == 2:
+            score, chunk = item
+        else:
+            continue
         title = getattr(chunk, "section_title", None) or "Document"
         snippet = (chunk.content or "")[:400]
         sources.append(AiAnswerSource(id=chunk.id, title=title, snippet=snippet))

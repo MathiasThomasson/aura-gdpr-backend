@@ -1,42 +1,54 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentContext, current_context
 from app.db.database import get_db
-from app.db.models.incident import Incident
-from app.schemas.incidents import IncidentCreate, IncidentOut
-from app.services.email import send_templated_email
+from app.schemas.incidents import IncidentCreate, IncidentOut, IncidentUpdate
+from app.services.incident_service import (
+    create_incident,
+    delete_incident,
+    get_incident,
+    list_incidents,
+    update_incident,
+)
 
 router = APIRouter(prefix="/api/incidents", tags=["Incidents"])
 
 
 @router.get("", response_model=list[IncidentOut], summary="List incidents", description="List incidents for the current tenant.")
-async def list_incidents(db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)):
-    result = await db.execute(select(Incident).where(Incident.tenant_id == ctx.tenant_id))
-    return [IncidentOut.model_validate(inc) for inc in result.scalars().all()]
+async def list_incident_items(db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)):
+    return await list_incidents(db, ctx.tenant_id)
 
 
-@router.post("", response_model=IncidentOut, status_code=201, summary="Create incident", description="Create an incident; high severity triggers an alert email.")
-async def create_incident(
+@router.post("", response_model=IncidentOut, status_code=201, summary="Create incident", description="Create a new incident for the tenant.")
+async def create_incident_endpoint(
     payload: IncidentCreate,
     db: AsyncSession = Depends(get_db),
     ctx: CurrentContext = Depends(current_context),
 ):
-    incident = Incident(tenant_id=ctx.tenant_id, title=payload.title, severity=payload.severity, status="open")
-    db.add(incident)
-    await db.commit()
-    await db.refresh(incident)
-    if payload.severity == "high":
-        await send_templated_email(
-            to=ctx.user.email,
-            subject="Incident alert",
-            template="incident_alert_en.txt",
-            context={
-                "organization_name": str(ctx.tenant_id),
-                "recipient_name": ctx.user.email,
-                "link": "https://app.example.com/incidents",
-                "incident_title": payload.title,
-            },
-        )
-    return IncidentOut.model_validate(incident)
+    return await create_incident(db, ctx.tenant_id, payload)
+
+
+@router.get("/{incident_id}", response_model=IncidentOut)
+async def get_incident_endpoint(
+    incident_id: int, db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)
+):
+    return await get_incident(db, ctx.tenant_id, incident_id)
+
+
+@router.patch("/{incident_id}", response_model=IncidentOut)
+async def update_incident_endpoint(
+    incident_id: int,
+    payload: IncidentUpdate,
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    return await update_incident(db, ctx.tenant_id, incident_id, payload)
+
+
+@router.delete("/{incident_id}")
+async def delete_incident_endpoint(
+    incident_id: int, db: AsyncSession = Depends(get_db), ctx: CurrentContext = Depends(current_context)
+):
+    await delete_incident(db, ctx.tenant_id, incident_id)
+    return {"ok": True}

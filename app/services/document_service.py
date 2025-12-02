@@ -58,12 +58,14 @@ def _to_tag_read(link: DocumentTagLink) -> DocumentTagRead:
 
 def _to_document_read(doc: Document) -> DocumentRead:
     tags = []
-    for link in doc.tags or []:
-        if link.tag:
-            tags.append(_to_tag_read(link))
+    if "tags" in doc.__dict__:
+        for link in doc.tags or []:
+            if link.tag:
+                tags.append(_to_tag_read(link))
     return DocumentRead(
         id=doc.id,
         title=doc.title,
+        description=doc.description,
         category=doc.category,
         status=doc.status,
         current_version=doc.current_version,
@@ -130,6 +132,7 @@ async def create_document(
     doc = Document(
         tenant_id=tenant_id,
         title=payload.title,
+        description=payload.description,
         category=payload.category,
         status=payload.status or "active",
         created_by_id=user_id,
@@ -158,6 +161,8 @@ async def update_document(
     doc = await _get_document(db, tenant_id, doc_id)
     if payload.title is not None:
         doc.title = payload.title
+    if payload.description is not None:
+        doc.description = payload.description
     if payload.category is not None:
         doc.category = payload.category
     if payload.status is not None:
