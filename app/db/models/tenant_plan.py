@@ -2,12 +2,16 @@ import sqlalchemy as sa
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 
+from app.core.config import settings
 from app.db.base import Base, TenantBoundMixin
 
-try:
-    JSONType = JSONB
-except Exception:  # pragma: no cover - fallback for SQLite
+if settings.DATABASE_URL.startswith("sqlite"):
     from sqlalchemy import JSON as JSONType  # type: ignore
+else:  # pragma: no cover - prefer JSONB for Postgres
+    try:
+        JSONType = JSONB
+    except Exception:  # pragma: no cover
+        from sqlalchemy import JSON as JSONType  # type: ignore
 
 
 class TenantPlan(TenantBoundMixin, Base):

@@ -1,7 +1,9 @@
 import os
-import pytest
 from pathlib import Path
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 # Set up test database before anything else imports the app
@@ -67,7 +69,7 @@ except Exception as e:
         pass
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def get_test_db():
     """Async DB session generator for tests."""
     async with TestAsyncSession() as session:
@@ -82,6 +84,19 @@ def setup_test_db_override():
     """Override get_db dependency in the FastAPI app before tests run."""
     from main import app
     from app.db.database import get_db
+    from app.middleware import rate_limit as rate_limit_middleware
+
+    # Reset in-memory rate limits between tests to avoid cross-test interference
+    try:
+        rate_limit_middleware._state.clear()
+    except Exception:
+        pass
+    try:
+        import app.api.routes.ai as ai_module
+
+        ai_module._rate_limit_state.clear()
+    except Exception:
+        pass
 
     async def test_get_db():
         async with TestAsyncSession() as session:

@@ -3,8 +3,8 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, text
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
@@ -12,9 +12,10 @@ from app.core.deps import CurrentContext, current_context
 from app.core.config import settings
 from app.db.database import get_db
 from app.db.models.dsr import DataSubjectRequest
+from app.db.models.dsr_status_history import DSRStatusHistory
 from app.db.models.tenant_dsr_settings import TenantDSRSettings
 from app.middleware.rate_limit import rate_limit
-from app.schemas.dsr import ALLOWED_DSR_STATUSES, DSRCreate, DSROut, DSRUpdate
+from app.schemas.dsr import ALLOWED_DSR_STATUSES, DSRCreate, DSROut, DSRStatusChange, DSRUpdate
 from app.schemas.dsr import ALLOWED_DSR_PRIORITIES, PublicDSRCreate
 from app.services.email import send_templated_email
 
@@ -24,6 +25,51 @@ router = APIRouter(prefix="/api/dsr", tags=["DSR"])
 public_router = APIRouter(prefix="/api/public/dsr", tags=["DSR Public"])
 
 FINAL_STATUSES = {"completed", "rejected"}
+
+
+def _parse_status_filters(raw_status: Optional[list[str]]) -> list[str]:
+    if not raw_status:
+        return []
+    statuses: list[str] = []
+    for item in raw_status:
+        parts = [p.strip() for p in item.split(",") if p.strip()]
+        statuses.extend(parts)
+    # Preserve order while deduplicating
+    seen: set[str] = set()
+    unique_statuses: list[str] = []
+    for status in statuses:
+        if status not in seen:
+            seen.add(status)
+            unique_statuses.append(status)
+    return unique_statuses
+
+
+async def _ensure_status_history_table(db: AsyncSession) -> None:
+    await db.run_sync(
+        lambda sync_session: DSRStatusHistory.__table__.create(
+            bind=sync_session.get_bind(), checkfirst=True  # type: ignore[arg-type]
+        )
+    )
+
+
+async def _record_status_history(
+    db: AsyncSession,
+    dsr: DataSubjectRequest,
+    from_status: str,
+    to_status: str,
+    changed_by_user_id: Optional[int],
+    note: Optional[str],
+) -> None:
+    await _ensure_status_history_table(db)
+    history = DSRStatusHistory(
+        dsr_id=dsr.id,
+        from_status=from_status,
+        to_status=to_status,
+        changed_by_user_id=changed_by_user_id,
+        changed_at=datetime.utcnow(),
+        note=note,
+    )
+    db.add(history)
 
 
 async def _get_dsr_or_404(db: AsyncSession, tenant_id: int, dsr_id: int) -> DataSubjectRequest:
@@ -37,6 +83,43 @@ async def _get_dsr_or_404(db: AsyncSession, tenant_id: int, dsr_id: int) -> Data
     if not dsr:
         raise HTTPException(status_code=404, detail="DSR not found")
     return dsr
+
+
+async def _apply_status_change(
+    db: AsyncSession,
+    dsr: DataSubjectRequest,
+    new_status: str,
+    ctx: CurrentContext,
+    note: Optional[str] = None,
+    reject_same: bool = False,
+) -> None:
+    if new_status not in ALLOWED_DSR_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if dsr.status == new_status:
+        if reject_same:
+            raise HTTPException(status_code=400, detail="Status is unchanged")
+        return
+
+    previous_status = dsr.status
+    dsr.status = new_status
+
+    if new_status in FINAL_STATUSES:
+        dsr.completed_at = datetime.utcnow()
+        if dsr.subject_email:
+            await send_templated_email(
+                to=dsr.subject_email,
+                subject="Your request is completed",
+                template="dsr_completed_en.txt",
+                context={
+                    "recipient_name": dsr.subject_name,
+                    "organization_name": str(ctx.tenant_id),
+                    "link": "https://app.example.com/dsr",
+                },
+            )
+    else:
+        dsr.completed_at = None
+
+    await _record_status_history(db, dsr, previous_status, new_status, getattr(ctx.user, "id", None), note)
 
 
 def _public_base_url() -> str:
@@ -103,9 +186,16 @@ async def list_dsrs(
     ctx: CurrentContext = Depends(current_context),
     limit: int = 50,
     offset: int = 0,
+    status: Optional[list[str]] = Query(None),
+    overdue: bool = False,
 ):
+    statuses = _parse_status_filters(status)
+    invalid_statuses = [s for s in statuses if s not in ALLOWED_DSR_STATUSES]
+    if invalid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status filter")
+
     try:
-        result = await db.execute(
+        stmt = (
             select(DataSubjectRequest)
             .options(
                 load_only(
@@ -127,11 +217,24 @@ async def list_dsrs(
                 )
             )
             .where(DataSubjectRequest.tenant_id == ctx.tenant_id, DataSubjectRequest.deleted_at.is_(None))
-            .order_by(DataSubjectRequest.received_at.desc())
-            .limit(limit)
-            .offset(offset)
         )
+
+        if statuses:
+            stmt = stmt.where(DataSubjectRequest.status.in_(statuses))
+
+        if overdue:
+            today = datetime.utcnow().date()
+            stmt = stmt.where(
+                DataSubjectRequest.deadline.is_not(None),
+                func.date(DataSubjectRequest.deadline) < today,
+                DataSubjectRequest.status != "completed",
+            )
+
+        stmt = stmt.order_by(DataSubjectRequest.received_at.desc()).limit(limit).offset(offset)
+        result = await db.execute(stmt)
         return result.scalars().all()
+    except HTTPException:
+        raise
     except Exception:
         try:
             logger.exception("Failed to list DSRs; returning empty list")
@@ -148,25 +251,30 @@ async def create_dsr(
     db: AsyncSession = Depends(get_db),
     ctx: CurrentContext = Depends(current_context),
 ):
-    if payload.status not in ALLOWED_DSR_STATUSES:
+    status = payload.status or "received"
+    if status not in ALLOWED_DSR_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
     if payload.priority not in ALLOWED_DSR_PRIORITIES:
         raise HTTPException(status_code=400, detail="Invalid priority")
 
-    completed_at = datetime.utcnow() if payload.status in FINAL_STATUSES else None
+    created_at = payload.received_at or datetime.utcnow()
+    received_at = payload.received_at or created_at
+    deadline = payload.deadline or (created_at + timedelta(days=30))
+    completed_at = datetime.utcnow() if status in FINAL_STATUSES else None
     dsr = DataSubjectRequest(
         tenant_id=ctx.tenant_id,
         request_type=payload.request_type,
         subject_name=payload.subject_name,
         subject_email=payload.subject_email,
         priority=payload.priority,
-        status=payload.status,
-        received_at=payload.received_at or datetime.utcnow(),
-        deadline=payload.deadline,
+        status=status,
+        received_at=received_at,
+        deadline=deadline,
         completed_at=completed_at,
         description=payload.description,
         source=payload.source,
         deleted_at=None,
+        created_at=created_at,
     )
     db.add(dsr)
     await db.commit()
@@ -185,6 +293,21 @@ async def create_dsr(
     return dsr
 
 
+@router.patch("/{dsr_id}/status", response_model=DSROut, summary="Change DSR status", description="Update the status of a DSR and record history.")
+async def change_dsr_status(
+    dsr_id: int,
+    payload: DSRStatusChange,
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    dsr = await _get_dsr_or_404(db, ctx.tenant_id, dsr_id)
+    await _apply_status_change(db, dsr, payload.status, ctx, note=payload.note, reject_same=True)
+    db.add(dsr)
+    await db.commit()
+    await db.refresh(dsr)
+    return dsr
+
+
 @router.patch("/{dsr_id}", response_model=DSROut, summary="Update DSR", description="Update status, notes, or due date for a DSR.")
 async def update_dsr(
     dsr_id: int,
@@ -195,27 +318,7 @@ async def update_dsr(
     dsr = await _get_dsr_or_404(db, ctx.tenant_id, dsr_id)
 
     if payload.status is not None:
-        if payload.status not in ALLOWED_DSR_STATUSES:
-            raise HTTPException(status_code=400, detail="Invalid status")
-        new_status = payload.status
-        status_changed = dsr.status != new_status
-        dsr.status = new_status
-        if new_status in FINAL_STATUSES:
-            if status_changed or dsr.completed_at is None:
-                dsr.completed_at = datetime.utcnow()
-                if dsr.subject_email:
-                    await send_templated_email(
-                        to=dsr.subject_email,
-                        subject="Your request is completed",
-                        template="dsr_completed_en.txt",
-                        context={
-                            "recipient_name": dsr.subject_name,
-                            "organization_name": str(ctx.tenant_id),
-                            "link": "https://app.example.com/dsr",
-                        },
-                    )
-        else:
-            dsr.completed_at = None
+        await _apply_status_change(db, dsr, payload.status, ctx)
 
     if payload.description is not None:
         dsr.description = payload.description
@@ -301,6 +404,7 @@ async def submit_public_dsr(
         source="public_form",
         received_at=received_at,
         deadline=deadline,
+        created_at=received_at,
     )
     db.add(dsr)
     await db.commit()

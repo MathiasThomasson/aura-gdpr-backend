@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import AliasChoices, BaseModel, EmailStr, Field, field_validator
+from pydantic import AliasChoices, BaseModel, EmailStr, Field, computed_field, field_validator
 
-ALLOWED_DSR_STATUSES = {"received", "open", "in_progress", "completed", "rejected"}
+ALLOWED_DSR_STATUSES = {"received", "identity_verification", "in_progress", "completed", "rejected"}
 ALLOWED_DSR_PRIORITIES = {"low", "medium", "high"}
 ALLOWED_DSR_SOURCES = {"internal", "public_form"}
 
@@ -27,7 +27,7 @@ class DSRBase(BaseModel):
 
 
 class DSRCreate(DSRBase):
-    status: str = "open"
+    status: str = "received"
     source: str = "internal"
 
     @field_validator("status")
@@ -81,6 +81,15 @@ class DSROut(DSRBase):
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
 
+    @computed_field
+    @property
+    def is_overdue(self) -> bool:
+        if not self.deadline:
+            return False
+        deadline_date = self.deadline.date() if isinstance(self.deadline, datetime) else self.deadline
+        today = datetime.utcnow().date()
+        return deadline_date < today and self.status != "completed"
+
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
@@ -98,3 +107,8 @@ class PublicDSRCreate(BaseModel):
         if normalized not in ALLOWED_DSR_PRIORITIES:
             raise ValueError(f"priority must be one of {sorted(ALLOWED_DSR_PRIORITIES)}")
         return normalized
+
+
+class DSRStatusChange(BaseModel):
+    status: str
+    note: Optional[str] = None

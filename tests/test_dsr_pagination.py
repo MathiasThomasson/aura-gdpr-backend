@@ -46,7 +46,7 @@ def test_dsr_list_pagination():
             "request_type": f"type-{i}",
             "subject_name": f"subject-{i}",
             "subject_email": email,
-            "status": "open",
+            "status": "received",
         }
         resp = client.post("/api/dsr/", json=payload)
         assert resp.status_code == 201
