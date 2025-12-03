@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 import re
 import unicodedata
 import uuid
@@ -6,6 +7,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log_event
@@ -21,6 +23,9 @@ from app.db.models.refresh_token import RefreshToken
 from app.db.models.tenant import Tenant
 from app.db.models.user import User
 from app.models.auth import LoginRequest, RegisterRequest
+
+
+logger = logging.getLogger("app.auth")
 
 
 def slugify(value: str) -> str:
@@ -61,32 +66,41 @@ async def register_user_in_tenant(db: AsyncSession, payload: RegisterRequest) ->
     tenant = None
     tenant_id = payload.tenant_id
     created_tenant = False
-    if tenant_id is None:
-        tenant = await _create_tenant_for_email(db, payload.email)
-        tenant_id = tenant.id
-        created_tenant = True
-    else:
-        tenant = await db.get(Tenant, tenant_id)
-        if not tenant:
-            raise HTTPException(status_code=404, detail="Tenant not found")
-    existing = await db.execute(select(User).where(User.email == payload.email))
-    if existing.scalars().first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-    role = payload.role or (Role.OWNER.value if created_tenant else Role.USER.value)
-    if role not in ALLOWED_ROLES:
-        raise HTTPException(status_code=400, detail="Invalid role")
-    user = User(
-        email=payload.email,
-        hashed_password=hash_password(payload.password),
-        tenant_id=tenant_id,
-        role=role,
-        status="active",
-        is_active=True,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
+    try:
+        if tenant_id is None:
+            tenant = await _create_tenant_for_email(db, payload.email)
+            tenant_id = tenant.id
+            created_tenant = True
+        else:
+            tenant = await db.get(Tenant, tenant_id)
+            if not tenant:
+                raise HTTPException(status_code=404, detail="Tenant not found")
+        existing = await db.execute(select(User).where(User.email == payload.email))
+        if existing.scalars().first():
+            raise HTTPException(status_code=400, detail="Email already registered")
+        role = payload.role or (Role.OWNER.value if created_tenant else Role.USER.value)
+        if role not in ALLOWED_ROLES:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        user = User(
+            email=payload.email,
+            hashed_password=hash_password(payload.password),
+            tenant_id=tenant_id,
+            role=role,
+            status="active",
+            is_active=True,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return user
+    except HTTPException:
+        raise
+    except SQLAlchemyError as exc:
+        logger.error("User registration failed", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"DB error: {exc}")
+    except Exception as exc:
+        logger.error("Unexpected error during registration", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
 
 
 async def issue_token_pair(user: User) -> tuple[str, str, datetime, str]:
