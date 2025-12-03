@@ -114,30 +114,39 @@ async def issue_token_pair(user: User) -> tuple[str, str, datetime, str]:
 
 
 async def login_user(db: AsyncSession, payload: LoginRequest) -> tuple[User, str, RefreshToken]:
-    result = await db.execute(select(User).where(User.email == payload.email))
-    user = result.scalars().first()
-    if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
-    if user.tenant_id is None:
-        raise HTTPException(status_code=400, detail="User not assigned to a tenant")
-    if getattr(user, "status", "active") == "disabled":
-        raise HTTPException(status_code=403, detail="User is disabled")
-    if getattr(user, "status", "active") == "pending_invite":
-        raise HTTPException(status_code=403, detail="Invitation not accepted yet")
+    try:
+        result = await db.execute(select(User).where(User.email == payload.email))
+        user = result.scalars().first()
+        if not user or not verify_password(payload.password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="Incorrect email or password")
+        if user.tenant_id is None:
+            raise HTTPException(status_code=400, detail="User not assigned to a tenant")
+        if getattr(user, "status", "active") == "disabled":
+            raise HTTPException(status_code=403, detail="User is disabled")
+        if getattr(user, "status", "active") == "pending_invite":
+            raise HTTPException(status_code=403, detail="Invitation not accepted yet")
 
-    access_token, refresh_token, refresh_expires, family_id = await issue_token_pair(user)
-    rt = RefreshToken(
-        user_id=user.id,
-        tenant_id=user.tenant_id,
-        token=refresh_token,
-        family_id=family_id,
-        expires_at=refresh_expires,
-    )
-    db.add(rt)
-    user.last_login_at = datetime.now(timezone.utc)
-    db.add(user)
-    await db.commit()
-    return user, access_token, rt
+        access_token, refresh_token, refresh_expires, family_id = await issue_token_pair(user)
+        rt = RefreshToken(
+            user_id=user.id,
+            tenant_id=user.tenant_id,
+            token=refresh_token,
+            family_id=family_id,
+            expires_at=refresh_expires,
+        )
+        db.add(rt)
+        user.last_login_at = datetime.now(timezone.utc)
+        db.add(user)
+        await db.commit()
+        return user, access_token, rt
+    except HTTPException:
+        raise
+    except SQLAlchemyError as exc:
+        logger.error("Login failed due to DB error", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"DB error: {exc}")
+    except Exception as exc:
+        logger.error("Unexpected error during login", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
 
 
 async def refresh_session(db: AsyncSession, refresh_token_str: str) -> tuple[str, RefreshToken]:
