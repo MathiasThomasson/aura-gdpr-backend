@@ -103,7 +103,7 @@ async def login_user(db: AsyncSession, payload: LoginRequest) -> tuple[User, str
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalars().first()
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
     if user.tenant_id is None:
         raise HTTPException(status_code=400, detail="User not assigned to a tenant")
     if getattr(user, "status", "active") == "disabled":

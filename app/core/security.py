@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from jose import jwt
 from passlib.context import CryptContext
+from passlib.exc import PasslibError, UnknownHashError
 
 from app.core.config import settings
 
@@ -16,7 +17,19 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    if not hashed_password:
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except UnknownHashError:
+        # Unsupported or legacy hash scheme; treat as invalid password
+        return False
+    except PasslibError:
+        # Any other Passlib verification error should be treated as invalid
+        return False
+    except Exception:
+        # Unexpected errors must not leak; fail closed
+        return False
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: timedelta | None = None) -> str:
