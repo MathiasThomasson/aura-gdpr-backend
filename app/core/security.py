@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from jose import jwt
 from passlib.context import CryptContext
-from passlib.exc import PasslibError, UnknownHashError
+from passlib.exc import UnknownHashError
 
 from app.core.config import settings
 
@@ -23,9 +23,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return pwd_context.verify(plain_password, hashed_password)
     except UnknownHashError:
         # Unsupported or legacy hash scheme; treat as invalid password
-        return False
-    except PasslibError:
-        # Any other Passlib verification error should be treated as invalid
         return False
     except Exception:
         # Unexpected errors must not leak; fail closed
