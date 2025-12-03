@@ -1,9 +1,11 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
+from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
@@ -17,6 +19,7 @@ from app.db.models.tenant_dsr_settings import TenantDSRSettings
 from app.middleware.rate_limit import rate_limit
 from app.schemas.dsr import ALLOWED_DSR_STATUSES, DSRCreate, DSROut, DSRStatusChange, DSRUpdate
 from app.schemas.dsr import ALLOWED_DSR_PRIORITIES, PublicDSRCreate
+from app.services.dsr_pdf_service import generate_dsr_pdf
 from app.services.email import send_templated_email
 
 logger = logging.getLogger(__name__)
@@ -340,6 +343,21 @@ async def update_dsr(
     await db.commit()
     await db.refresh(dsr)
     return dsr
+
+
+@router.get("/{dsr_id}/export-pdf", summary="Export DSR as PDF", description="Download a PDF summary for the DSR.")
+async def export_dsr_pdf(
+    dsr_id: int,
+    db: AsyncSession = Depends(get_db),
+    ctx: CurrentContext = Depends(current_context),
+):
+    pdf_bytes = await generate_dsr_pdf(db, ctx.tenant_id, dsr_id)
+    filename = f"dsr-{dsr_id}.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/public-link", summary="Get public DSR link", description="Fetch the public DSR submission link for the current tenant.")
