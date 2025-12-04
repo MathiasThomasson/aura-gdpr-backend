@@ -15,6 +15,14 @@ from app.schemas.platform_admin import (
     PlatformOverviewResponse,
     PlatformTenantDetailResponse,
     PlatformTenantListItem,
+    PlatformUserItem,
+    PlatformPlan,
+    PlatformBillingStatus,
+    PayPalConfig,
+    PayPalWebhookEvent,
+    AIUsageSummary,
+    LogItem,
+    JobStatus,
 )
 
 router = APIRouter(prefix="/api/admin/platform", tags=["Platform Admin"])
@@ -179,3 +187,246 @@ async def impersonate_tenant(tenant_id: int, db: AsyncSession = Depends(get_db))
     # Issue a placeholder one-time token for impersonation flows (to be wired to UI).
     token = f"impersonation-{tenant_id}-{int(datetime.now().timestamp())}"
     return {"token": token, "tenant_id": tenant_id}
+
+
+@router.get("/users", response_model=list[PlatformUserItem], dependencies=[Depends(require_platform_owner)])
+async def list_users_platform(
+    db: AsyncSession = Depends(get_db),
+    email: str | None = Query(None),
+    role: str | None = Query(None),
+    status: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[PlatformUserItem]:
+    stmt = select(User, Tenant.name.label("tenant_name")).join(Tenant, User.tenant_id == Tenant.id, isouter=True)
+    if email:
+        like = f"%{email.lower()}%"
+        stmt = stmt.where(func.lower(User.email).like(like))
+    if role:
+        stmt = stmt.where(User.role == role)
+    if status:
+        stmt = stmt.where(User.status == status)
+    stmt = stmt.offset(offset).limit(limit)
+    res = await db.execute(stmt)
+    items: list[PlatformUserItem] = []
+    for user, tenant_name in res.all():
+        items.append(
+            PlatformUserItem(
+                id=user.id,
+                email=user.email,
+                role=user.role,
+                tenant_id=user.tenant_id,
+                tenant_name=tenant_name,
+                last_login_at=getattr(user, "last_login_at", None),
+                status=getattr(user, "status", "active") or "active",
+            )
+        )
+    return items
+
+
+@router.get("/users/{user_id}", response_model=PlatformUserItem, dependencies=[Depends(require_platform_owner)])
+async def get_user_platform(user_id: int, db: AsyncSession = Depends(get_db)) -> PlatformUserItem:
+    stmt = select(User, Tenant.name.label("tenant_name")).join(Tenant, User.tenant_id == Tenant.id, isouter=True).where(User.id == user_id)
+    res = await db.execute(stmt)
+    row = res.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    user, tenant_name = row
+    return PlatformUserItem(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        tenant_id=user.tenant_id,
+        tenant_name=tenant_name,
+        last_login_at=getattr(user, "last_login_at", None),
+        status=getattr(user, "status", "active") or "active",
+    )
+
+
+async def _set_user_status(user_id: int, status: str, db: AsyncSession) -> PlatformUserItem:
+    stmt = select(User, Tenant.name.label("tenant_name")).join(Tenant, User.tenant_id == Tenant.id, isouter=True).where(User.id == user_id)
+    res = await db.execute(stmt)
+    row = res.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    user, tenant_name = row
+    user.status = status
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return PlatformUserItem(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        tenant_id=user.tenant_id,
+        tenant_name=tenant_name,
+        last_login_at=getattr(user, "last_login_at", None),
+        status=getattr(user, "status", "active") or "active",
+    )
+
+
+@router.post("/users/{user_id}/disable", response_model=PlatformUserItem, dependencies=[Depends(require_platform_owner)])
+async def disable_user(user_id: int, db: AsyncSession = Depends(get_db)) -> PlatformUserItem:
+    return await _set_user_status(user_id, "disabled", db)
+
+
+@router.post("/users/{user_id}/enable", response_model=PlatformUserItem, dependencies=[Depends(require_platform_owner)])
+async def enable_user(user_id: int, db: AsyncSession = Depends(get_db)) -> PlatformUserItem:
+    return await _set_user_status(user_id, "active", db)
+
+
+@router.get("/plans", response_model=list[PlatformPlan], dependencies=[Depends(require_platform_owner)])
+async def list_plans() -> list[PlatformPlan]:
+    return [
+        PlatformPlan(
+            id="free",
+            name="Free",
+            monthly_price_eur=0,
+            yearly_price_eur=0,
+            paypal_product_id=None,
+            paypal_plan_id_monthly=None,
+            paypal_plan_id_yearly=None,
+            included_ai_tokens=1000,
+            max_users=3,
+            features=["dsr", "documents"],
+        ),
+        PlatformPlan(
+            id="pro",
+            name="Pro",
+            monthly_price_eur=99,
+            yearly_price_eur=999,
+            paypal_product_id="prod_pro",
+            paypal_plan_id_monthly="plan_pro_m",
+            paypal_plan_id_yearly="plan_pro_y",
+            included_ai_tokens=100000,
+            max_users=50,
+            features=["dsr", "documents", "ai_audit", "ropa", "dpia"],
+        ),
+    ]
+
+
+@router.post("/plans", response_model=PlatformPlan, dependencies=[Depends(require_platform_owner)])
+async def create_plan(plan: PlatformPlan) -> PlatformPlan:
+    # Stub: echo back. Replace with persistence when available.
+    return plan
+
+
+@router.patch("/plans/{plan_id}", response_model=PlatformPlan, dependencies=[Depends(require_platform_owner)])
+async def update_plan(plan_id: str, plan: PlatformPlan) -> PlatformPlan:
+    # Stub: echo back with plan_id.
+    return plan
+
+
+@router.get("/tenants/{tenant_id}/billing", response_model=PlatformBillingStatus, dependencies=[Depends(require_platform_owner)])
+async def tenant_billing(tenant_id: int, db: AsyncSession = Depends(get_db)) -> PlatformBillingStatus:
+    tenant = await db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return PlatformBillingStatus(
+        tenant_id=tenant.id,
+        plan=getattr(tenant, "plan", "free") or "free",
+        billing_cycle="monthly",
+        next_payment_date=None,
+        paypal_subscription_id=None,
+        status=getattr(tenant, "status", "active") or "active",
+        payment_history=[],
+    )
+
+
+@router.post("/tenants/{tenant_id}/billing/resync", dependencies=[Depends(require_platform_owner)])
+async def tenant_billing_resync(tenant_id: int) -> dict:
+    return {"tenant_id": tenant_id, "status": "resync_requested"}
+
+
+@router.get("/paypal/config", response_model=PayPalConfig, dependencies=[Depends(require_platform_owner)])
+async def paypal_config() -> PayPalConfig:
+    return PayPalConfig(mode="sandbox", client_id_masked="****", webhook_id=None)
+
+
+@router.post("/paypal/config", response_model=PayPalConfig, dependencies=[Depends(require_platform_owner)])
+async def paypal_config_save(config: PayPalConfig) -> PayPalConfig:
+    return config
+
+
+@router.post("/paypal/test-connection", dependencies=[Depends(require_platform_owner)])
+async def paypal_test_connection() -> dict:
+    return {"status": "ok", "message": "Test connection not implemented (stub)."}
+
+
+@router.get("/paypal/webhook-events", response_model=list[PayPalWebhookEvent], dependencies=[Depends(require_platform_owner)])
+async def paypal_webhook_events() -> list[PayPalWebhookEvent]:
+    now = datetime.now(timezone.utc)
+    return [
+        PayPalWebhookEvent(
+          event_id="evt_1",
+          event_type="subscription.created",
+          status="processed",
+          received_at=now,
+          tenant_id=None,
+          message=None,
+        )
+    ]
+
+
+@router.get("/ai/usage", response_model=AIUsageSummary, dependencies=[Depends(require_platform_owner)])
+async def ai_usage_summary() -> AIUsageSummary:
+    return AIUsageSummary(
+        tokens_24h=0,
+        tokens_7d=0,
+        tokens_30d=0,
+        cost_eur_estimate=0.0,
+        items=[],
+    )
+
+
+@router.get("/ai/usage/{tenant_id}", response_model=AIUsageSummary, dependencies=[Depends(require_platform_owner)])
+async def ai_usage_tenant(tenant_id: int) -> AIUsageSummary:
+    return AIUsageSummary(
+        tokens_24h=0,
+        tokens_7d=0,
+        tokens_30d=0,
+        cost_eur_estimate=0.0,
+        items=[],
+    )
+
+
+@router.post("/ai/limits/{tenant_id}", dependencies=[Depends(require_platform_owner)])
+async def ai_limits_update(tenant_id: int, payload: dict) -> dict:
+    return {"tenant_id": tenant_id, "saved": True, "payload": payload}
+
+
+@router.get("/logs", response_model=list[LogItem], dependencies=[Depends(require_platform_owner)])
+async def platform_logs(
+    db: AsyncSession = Depends(get_db),
+    level: str | None = Query(None),
+    service: str | None = Query(None),
+    tenant_id: int | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+) -> list[LogItem]:
+    stmt = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+    if tenant_id:
+        stmt = stmt.where(AuditLog.tenant_id == tenant_id)
+    res = await db.execute(stmt)
+    logs: list[LogItem] = []
+    for log in res.scalars().all():
+        logs.append(
+            LogItem(
+                timestamp=getattr(log, "created_at", datetime.now(timezone.utc)),
+                level="INFO",
+                service="backend",
+                tenant_id=getattr(log, "tenant_id", None),
+                message=getattr(log, "action", "event"),
+                details=None,
+            )
+        )
+    return logs
+
+
+@router.get("/jobs", response_model=list[JobStatus], dependencies=[Depends(require_platform_owner)])
+async def platform_jobs() -> list[JobStatus]:
+    now = datetime.now(timezone.utc)
+    return [
+        JobStatus(name="Monthly Compliance Report Job", last_run=now, status="ok", message=None),
+        JobStatus(name="DSR Deadline Checker Job", last_run=now, status="ok", message=None),
+        JobStatus(name="Backup Job", last_run=now, status="ok", message=None),
+    ]
