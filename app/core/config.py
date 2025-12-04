@@ -76,7 +76,7 @@ class Settings(BaseSettings):
 
     # Platform admin access
     PLATFORM_ADMIN_EMAIL: str = "admin@aura-gdpr.se"
-    PLATFORM_OWNER_EMAILS: Optional[str] = None
+    PLATFORM_OWNER_EMAILS: Optional[str] = "owner1@aura-gdpr.se"
 
     class Config:
         env_file = ".env"
