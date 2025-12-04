@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import settings, is_platform_owner_email
 from app.db.database import get_db
 from app.db.models.user import User
 
@@ -55,7 +55,11 @@ def require_role(*allowed_roles: str):
 
 
 async def get_platform_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Allow only the configured platform admin email."""
-    if current_user.email.lower() != settings.PLATFORM_ADMIN_EMAIL.lower():
+    """Allow platform admin or platform owner accounts."""
+    if not (
+        current_user.role == "platform_owner"
+        or is_platform_owner_email(current_user.email)
+        or current_user.email.lower() == settings.PLATFORM_ADMIN_EMAIL.lower()
+    ):
         raise HTTPException(status_code=403, detail="Platform admin access required")
     return current_user
