@@ -38,6 +38,11 @@ def _load_average() -> Dict[str, float | None]:
                 return {"1m": None, "5m": None, "15m": None}
 
 
+@router.get("/ping", summary="Ping", description="Lightweight system ping for monitoring.")
+async def system_ping() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
 @router.get(
     "/health",
     summary="System health (superadmin)",

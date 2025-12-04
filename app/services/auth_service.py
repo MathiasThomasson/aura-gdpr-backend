@@ -143,10 +143,10 @@ async def login_user(db: AsyncSession, payload: LoginRequest) -> tuple[User, str
         raise
     except SQLAlchemyError as exc:
         logger.error("Login failed due to DB error", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"DB error: {exc}")
+        raise HTTPException(status_code=500, detail=f"DB error: {exc}") from exc
     except Exception as exc:
         logger.error("Unexpected error during login", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
 
 
 async def refresh_session(db: AsyncSession, refresh_token_str: str) -> tuple[str, RefreshToken]:
