@@ -110,5 +110,5 @@ async def me(current_user=Depends(get_current_user)):
         email=current_user.email,
         tenant_id=current_user.tenant_id,
         role=current_user.role,
-        is_platform_owner=is_platform_owner_email(current_user.email),
+        is_platform_owner=is_platform_owner_email(current_user.email) or getattr(current_user, "role", None) == "platform_owner",
     )

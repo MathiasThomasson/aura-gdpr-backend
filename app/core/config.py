@@ -88,9 +88,13 @@ settings = Settings()
 @lru_cache(maxsize=1)
 def _platform_owner_email_set() -> set[str]:
     raw = settings.PLATFORM_OWNER_EMAILS
-    if not raw:
-        return set()
-    return {email.strip().lower() for email in raw.split(",") if email.strip()}
+    emails = set()
+    if raw:
+        emails.update({email.strip().lower() for email in raw.split(",") if email.strip()})
+    admin_email = getattr(settings, "PLATFORM_ADMIN_EMAIL", None)
+    if admin_email:
+        emails.add(admin_email.strip().lower())
+    return emails
 
 
 def is_platform_owner_email(email: str) -> bool:
