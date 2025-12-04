@@ -32,7 +32,7 @@ logger = logging.getLogger("app.auth")
 
 
 @router.post("/register", summary="Register user", description="Create a new user within a tenant.")
-@rate_limit("global", limit=100, window_seconds=60)
+@rate_limit("auth", limit=1000, window_seconds=60)
 async def register(user_data: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
     user = await register_user_in_tenant(db, user_data)
     request.state.user_id = user.id
@@ -45,7 +45,7 @@ async def register(user_data: RegisterRequest, request: Request, db: AsyncSessio
 
 
 @router.post("/login", response_model=TokenPair, summary="Login", description="Exchange credentials for access and refresh tokens.")
-@rate_limit("global", limit=100, window_seconds=60)
+@rate_limit("auth", limit=1000, window_seconds=60)
 async def login(user_data: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     try:
         user, access_token, rt = await login_user(db, user_data)
@@ -69,7 +69,7 @@ async def login(user_data: LoginRequest, request: Request, db: AsyncSession = De
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Refresh tokens", description="Refresh access token using a valid refresh token.")
-@rate_limit("global", limit=100, window_seconds=60)
+@rate_limit("auth", limit=1000, window_seconds=60)
 async def refresh_token(payload: RefreshRequest, request: Request, db: AsyncSession = Depends(get_db)):
     access_token, new_rt = await refresh_session(db, payload.refresh_token)
     request.state.user_id = getattr(new_rt, "user_id", None)
@@ -78,7 +78,7 @@ async def refresh_token(payload: RefreshRequest, request: Request, db: AsyncSess
 
 
 @router.post("/forgot-password", summary="Forgot password", description="Request a password reset token.")
-@rate_limit("global", limit=100, window_seconds=60)
+@rate_limit("auth", limit=1000, window_seconds=60)
 async def forgot_password(payload: PasswordResetRequest, request: Request, db: AsyncSession = Depends(get_db)):
     # generic response regardless of whether email exists
     generic = {"ok": True, "message": "If an account with that email exists, a reset link has been generated."}
@@ -91,7 +91,7 @@ async def forgot_password(payload: PasswordResetRequest, request: Request, db: A
 
 
 @router.post("/reset-password", summary="Reset password", description="Complete a password reset using the provided token.")
-@rate_limit("global", limit=100, window_seconds=60)
+@rate_limit("auth", limit=1000, window_seconds=60)
 async def reset_password_endpoint(payload: PasswordResetPerform, request: Request, db: AsyncSession = Depends(get_db)):
     await reset_password(db, payload.token, payload.new_password)
     request.state.user_id = None
