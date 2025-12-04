@@ -6,10 +6,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.audit import log_event
 from app.core.auth import get_current_user
+from app.core.config import is_platform_owner_email
 from app.db.database import get_db
 from app.db.models.user import User
 from app.middleware.rate_limit import rate_limit
 from app.models.auth import (
+    CurrentUserResponse,
     LoginRequest,
     PasswordResetPerform,
     PasswordResetRequest,
@@ -96,11 +98,17 @@ async def reset_password_endpoint(payload: PasswordResetPerform, request: Reques
     return {"ok": True}
 
 
-@router.get("/me", summary="Current user", description="Return information about the current authenticated user.")
+@router.get(
+    "/me",
+    summary="Current user",
+    description="Return information about the current authenticated user.",
+    response_model=CurrentUserResponse,
+)
 async def me(current_user=Depends(get_current_user)):
-    return {
-        "id": current_user.id,
-        "email": current_user.email,
-        "tenant_id": current_user.tenant_id,
-        "role": current_user.role,
-    }
+    return CurrentUserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        tenant_id=current_user.tenant_id,
+        role=current_user.role,
+        is_platform_owner=is_platform_owner_email(current_user.email),
+    )

@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic_settings import BaseSettings
+from functools import lru_cache
 
 
 class Settings(BaseSettings):
@@ -75,9 +76,24 @@ class Settings(BaseSettings):
 
     # Platform admin access
     PLATFORM_ADMIN_EMAIL: str = "admin@aura-gdpr.se"
+    PLATFORM_OWNER_EMAILS: Optional[str] = None
 
     class Config:
         env_file = ".env"
 
 
 settings = Settings()
+
+
+@lru_cache(maxsize=1)
+def _platform_owner_email_set() -> set[str]:
+    raw = settings.PLATFORM_OWNER_EMAILS
+    if not raw:
+        return set()
+    return {email.strip().lower() for email in raw.split(",") if email.strip()}
+
+
+def is_platform_owner_email(email: str) -> bool:
+    if not email:
+        return False
+    return email.strip().lower() in _platform_owner_email_set()

@@ -59,3 +59,11 @@ class TokenMetadata(BaseModel):
     expires_at: datetime
     revoked: bool
     revoked_reason: Optional[str] = None
+
+
+class CurrentUserResponse(BaseModel):
+    id: int
+    email: EmailStr
+    tenant_id: Optional[int] = None
+    role: Optional[str] = None
+    is_platform_owner: bool = False
