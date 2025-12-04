@@ -116,3 +116,37 @@ class JobStatus(BaseModel):
     last_run: Optional[datetime]
     status: str
     message: Optional[str] = None
+
+
+class WebhookItem(BaseModel):
+    id: str
+    name: str
+    target_url: str
+    events: list[str]
+    status: str
+    last_delivery_status: Optional[str] = None
+
+
+class ApiKeyItem(BaseModel):
+    id: str
+    name: str
+    key_id: str
+    created_at: datetime
+    last_used: Optional[datetime] = None
+    scopes: list[str]
+    status: str
+
+
+class FeatureFlagItem(BaseModel):
+    name: str
+    description: Optional[str] = None
+    status: bool
+    scope: str = "global"
+
+
+class GlobalConfig(BaseModel):
+    default_ai_model: str = "gpt-4o"
+    max_upload_mb: int = 20
+    global_rate_limit_rpm: int = 1000
+    dsr_default_deadline_days: int = 30
+    monthly_audit_day: int = 1

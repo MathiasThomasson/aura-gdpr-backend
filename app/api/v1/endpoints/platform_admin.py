@@ -23,6 +23,10 @@ from app.schemas.platform_admin import (
     AIUsageSummary,
     LogItem,
     JobStatus,
+    WebhookItem,
+    ApiKeyItem,
+    FeatureFlagItem,
+    GlobalConfig,
 )
 
 router = APIRouter(prefix="/api/admin/platform", tags=["Platform Admin"])
@@ -430,3 +434,86 @@ async def platform_jobs() -> list[JobStatus]:
         JobStatus(name="DSR Deadline Checker Job", last_run=now, status="ok", message=None),
         JobStatus(name="Backup Job", last_run=now, status="ok", message=None),
     ]
+
+
+@router.get("/webhooks", response_model=list[WebhookItem], dependencies=[Depends(require_platform_owner)])
+async def platform_webhooks() -> list[WebhookItem]:
+    return [
+        WebhookItem(
+            id="wh_1",
+            name="DSR webhook",
+            target_url="https://example.com/dsr",
+            events=["DSR.created", "DSR.completed"],
+            status="enabled",
+            last_delivery_status="ok",
+        )
+    ]
+
+
+@router.post("/webhooks", response_model=WebhookItem, dependencies=[Depends(require_platform_owner)])
+async def platform_webhook_create(item: WebhookItem) -> WebhookItem:
+    return item
+
+
+@router.patch("/webhooks/{webhook_id}", response_model=WebhookItem, dependencies=[Depends(require_platform_owner)])
+async def platform_webhook_update(webhook_id: str, item: WebhookItem) -> WebhookItem:
+    return item
+
+
+@router.delete("/webhooks/{webhook_id}", dependencies=[Depends(require_platform_owner)])
+async def platform_webhook_delete(webhook_id: str) -> dict:
+    return {"deleted": True, "id": webhook_id}
+
+
+@router.post("/webhooks/{webhook_id}/test", dependencies=[Depends(require_platform_owner)])
+async def platform_webhook_test(webhook_id: str) -> dict:
+    return {"sent": True, "id": webhook_id}
+
+
+@router.get("/api-keys", response_model=list[ApiKeyItem], dependencies=[Depends(require_platform_owner)])
+async def platform_api_keys() -> list[ApiKeyItem]:
+    now = datetime.now(timezone.utc)
+    return [
+        ApiKeyItem(
+            id="key_1",
+            name="Partner API",
+            key_id="api_****1234",
+            created_at=now,
+            last_used=None,
+            scopes=["read-only"],
+            status="active",
+        )
+    ]
+
+
+@router.post("/api-keys", response_model=ApiKeyItem, dependencies=[Depends(require_platform_owner)])
+async def platform_api_keys_create(item: ApiKeyItem) -> ApiKeyItem:
+    return item
+
+
+@router.post("/api-keys/{key_id}/revoke", dependencies=[Depends(require_platform_owner)])
+async def platform_api_keys_revoke(key_id: str) -> dict:
+    return {"revoked": True, "id": key_id}
+
+
+@router.get("/feature-flags", response_model=list[FeatureFlagItem], dependencies=[Depends(require_platform_owner)])
+async def platform_feature_flags() -> list[FeatureFlagItem]:
+    return [
+        FeatureFlagItem(name="ai_audit_engine", description="AI audit scoring", status=True, scope="global"),
+        FeatureFlagItem(name="dsr_public_form_v2", description="Public DSR form v2", status=False, scope="global"),
+    ]
+
+
+@router.post("/feature-flags", response_model=list[FeatureFlagItem], dependencies=[Depends(require_platform_owner)])
+async def platform_feature_flags_save(flags: list[FeatureFlagItem]) -> list[FeatureFlagItem]:
+    return flags
+
+
+@router.get("/config", response_model=GlobalConfig, dependencies=[Depends(require_platform_owner)])
+async def platform_config() -> GlobalConfig:
+    return GlobalConfig()
+
+
+@router.post("/config", response_model=GlobalConfig, dependencies=[Depends(require_platform_owner)])
+async def platform_config_save(config: GlobalConfig) -> GlobalConfig:
+    return config
