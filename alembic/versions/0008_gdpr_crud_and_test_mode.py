@@ -37,14 +37,15 @@ def _create_simple_table(name: str) -> None:
 def upgrade() -> None:
     bind = op.get_bind()
     insp = sa.inspect(bind)
+    existing_tables = set(insp.get_table_names())
 
     # Core CRUD modules
     for table in ("policies", "dpia_records", "ropa_records", "cookies", "toms", "projects"):
-        if not insp.has_table(table):
+        if table not in existing_tables:
             _create_simple_table(table)
 
     # Tasks table
-    if not insp.has_table("tasks"):
+    if "tasks" not in existing_tables:
         op.create_table(
             "tasks",
             sa.Column("id", sa.Integer(), primary_key=True),
@@ -65,16 +66,21 @@ def upgrade() -> None:
         op.create_index("ix_tasks_updated_at", "tasks", ["updated_at"], unique=False)
 
     # Extend documents/incidents/tenants/DSR tables
-    if not insp.has_column("documents", "description"):
+    document_columns = [col["name"] for col in insp.get_columns("documents")]
+    if "description" not in document_columns:
         op.add_column("documents", sa.Column("description", sa.Text(), nullable=True))
-    if not insp.has_column("incidents", "description"):
+
+    incident_columns = [col["name"] for col in insp.get_columns("incidents")]
+    if "description" not in incident_columns:
         op.add_column("incidents", sa.Column("description", sa.Text(), nullable=True))
-    if not insp.has_column("incidents", "updated_at"):
+    if "updated_at" not in incident_columns:
         op.add_column(
             "incidents",
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now()),
         )
-    if not insp.has_column("tenants", "is_test_tenant"):
+
+    tenant_columns = [col["name"] for col in insp.get_columns("tenants")]
+    if "is_test_tenant" not in tenant_columns:
         op.add_column("tenants", sa.Column("is_test_tenant", sa.Boolean(), nullable=False, server_default="1"))
 
     try:
@@ -87,10 +93,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     insp = sa.inspect(bind)
+    existing_tables = set(insp.get_table_names())
 
     # Drop newly added CRUD tables
     for table in ("projects", "toms", "cookies", "ropa_records", "dpia_records", "policies"):
-        if insp.has_table(table):
+        if table in existing_tables:
             op.drop_index(f"ix_{table}_updated_at", table_name=table)
             op.drop_index(f"ix_{table}_created_at", table_name=table)
             op.drop_index(f"ix_{table}_tenant_id", table_name=table)
@@ -98,7 +105,7 @@ def downgrade() -> None:
             op.drop_table(table)
 
     # Drop tasks table if created by this migration
-    if insp.has_table("tasks"):
+    if "tasks" in existing_tables:
         op.drop_index("ix_tasks_updated_at", table_name="tasks")
         op.drop_index("ix_tasks_created_at", table_name="tasks")
         op.drop_index("ix_tasks_tenant_id", table_name="tasks")
@@ -106,11 +113,16 @@ def downgrade() -> None:
         op.drop_table("tasks")
 
     # Remove added columns
-    if insp.has_column("documents", "description"):
+    document_columns = [col["name"] for col in insp.get_columns("documents")]
+    if "description" in document_columns:
         op.drop_column("documents", "description")
-    if insp.has_column("incidents", "updated_at"):
+
+    incident_columns = [col["name"] for col in insp.get_columns("incidents")]
+    if "updated_at" in incident_columns:
         op.drop_column("incidents", "updated_at")
-    if insp.has_column("incidents", "description"):
+    if "description" in incident_columns:
         op.drop_column("incidents", "description")
-    if insp.has_column("tenants", "is_test_tenant"):
+
+    tenant_columns = [col["name"] for col in insp.get_columns("tenants")]
+    if "is_test_tenant" in tenant_columns:
         op.drop_column("tenants", "is_test_tenant")
