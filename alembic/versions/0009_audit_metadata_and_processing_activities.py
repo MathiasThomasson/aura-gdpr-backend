@@ -20,14 +20,16 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     bind = op.get_bind()
     insp = sa.inspect(bind)
+    existing_tables = set(insp.get_table_names())
 
-    if insp.has_table("audit_logs"):
-        if not insp.has_column("audit_logs", "metadata"):
+    if "audit_logs" in existing_tables:
+        audit_columns = [col["name"] for col in insp.get_columns("audit_logs")]
+        if "metadata" not in audit_columns:
             op.add_column("audit_logs", sa.Column("metadata", sa.JSON(), nullable=True))
-        if not insp.has_column("audit_logs", "meta"):
+        if "meta" not in audit_columns:
             op.add_column("audit_logs", sa.Column("meta", sa.JSON(), nullable=True))
 
-    if not insp.has_table("processing_activities"):
+    if "processing_activities" not in existing_tables:
         op.create_table(
             "processing_activities",
             sa.Column("id", sa.Integer(), primary_key=True),
@@ -42,7 +44,7 @@ def upgrade() -> None:
         op.create_index("ix_processing_activities_created_at", "processing_activities", ["created_at"], unique=False)
         op.create_index("ix_processing_activities_updated_at", "processing_activities", ["updated_at"], unique=False)
 
-    if not insp.has_table("knowledge_documents"):
+    if "knowledge_documents" not in existing_tables:
         op.create_table(
             "knowledge_documents",
             sa.Column("id", sa.Integer(), primary_key=True),
@@ -59,7 +61,7 @@ def upgrade() -> None:
         op.create_index("ix_knowledge_documents_tenant_id", "knowledge_documents", ["tenant_id"], unique=False)
         op.create_index("ix_knowledge_documents_created_at", "knowledge_documents", ["created_at"], unique=False)
 
-    if not insp.has_table("knowledge_chunks"):
+    if "knowledge_chunks" not in existing_tables:
         op.create_table(
             "knowledge_chunks",
             sa.Column("id", sa.Integer(), primary_key=True),
@@ -77,7 +79,7 @@ def upgrade() -> None:
         op.create_index("ix_knowledge_chunks_document_id", "knowledge_chunks", ["document_id"], unique=False)
         op.create_index("ix_knowledge_chunks_checksum", "knowledge_chunks", ["checksum"], unique=False)
 
-    if not insp.has_table("knowledge_embeddings"):
+    if "knowledge_embeddings" not in existing_tables:
         op.create_table(
             "knowledge_embeddings",
             sa.Column("id", sa.Integer(), primary_key=True),
@@ -99,15 +101,16 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     insp = sa.inspect(bind)
+    existing_tables = set(insp.get_table_names())
 
-    if insp.has_table("processing_activities"):
+    if "processing_activities" in existing_tables:
         op.drop_index("ix_processing_activities_updated_at", table_name="processing_activities")
         op.drop_index("ix_processing_activities_created_at", table_name="processing_activities")
         op.drop_index("ix_processing_activities_tenant_id", table_name="processing_activities")
         op.drop_index("ix_processing_activities_id", table_name="processing_activities")
         op.drop_table("processing_activities")
 
-    if insp.has_table("knowledge_embeddings"):
+    if "knowledge_embeddings" in existing_tables:
         op.drop_index("ix_knowledge_embeddings_checksum", table_name="knowledge_embeddings")
         op.drop_index("ix_knowledge_embeddings_document_id", table_name="knowledge_embeddings")
         op.drop_index("ix_knowledge_embeddings_chunk_id", table_name="knowledge_embeddings")
@@ -115,21 +118,22 @@ def downgrade() -> None:
         op.drop_index("ix_knowledge_embeddings_id", table_name="knowledge_embeddings")
         op.drop_table("knowledge_embeddings")
 
-    if insp.has_table("knowledge_chunks"):
+    if "knowledge_chunks" in existing_tables:
         op.drop_index("ix_knowledge_chunks_checksum", table_name="knowledge_chunks")
         op.drop_index("ix_knowledge_chunks_document_id", table_name="knowledge_chunks")
         op.drop_index("ix_knowledge_chunks_tenant_id", table_name="knowledge_chunks")
         op.drop_index("ix_knowledge_chunks_id", table_name="knowledge_chunks")
         op.drop_table("knowledge_chunks")
 
-    if insp.has_table("knowledge_documents"):
+    if "knowledge_documents" in existing_tables:
         op.drop_index("ix_knowledge_documents_created_at", table_name="knowledge_documents")
         op.drop_index("ix_knowledge_documents_tenant_id", table_name="knowledge_documents")
         op.drop_index("ix_knowledge_documents_id", table_name="knowledge_documents")
         op.drop_table("knowledge_documents")
 
-    if insp.has_table("audit_logs"):
-        if insp.has_column("audit_logs", "meta"):
+    if "audit_logs" in existing_tables:
+        audit_columns = [col["name"] for col in insp.get_columns("audit_logs")]
+        if "meta" in audit_columns:
             op.drop_column("audit_logs", "meta")
-        if insp.has_column("audit_logs", "metadata"):
+        if "metadata" in audit_columns:
             op.drop_column("audit_logs", "metadata")

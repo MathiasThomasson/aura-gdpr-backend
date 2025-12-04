@@ -18,9 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _has_column(insp, table: str, column: str) -> bool:
-    if not insp.has_table(table):
+    if table not in insp.get_table_names():
         return False
-    return any(col["name"] == column for col in insp.get_columns(table))
+    columns = [col["name"] for col in insp.get_columns(table)]
+    return column in columns
 
 
 def _drop_index_if_exists(insp, name: str, table: str) -> None:
