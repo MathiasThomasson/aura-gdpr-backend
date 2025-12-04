@@ -63,3 +63,8 @@ async def get_platform_admin(current_user: User = Depends(get_current_user)) -> 
     ):
         raise HTTPException(status_code=403, detail="Platform admin access required")
     return current_user
+
+
+def require_platform_owner(current_user: User = Depends(get_platform_admin)) -> User:
+    """Alias guard for platform owner/admin use cases."""
+    return current_user
