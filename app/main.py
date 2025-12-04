@@ -93,6 +93,9 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def _global_rate_limit(request: Request, call_next):
+        # Allow auth endpoints to bypass the global limiter to avoid locking out login/refresh flows.
+        if request.url.path in {"/api/auth/login", "/api/auth/register", "/api/auth/refresh"}:
+            return await call_next(request)
         try:
             await global_rate_limiter(request)
         except HTTPException as exc:
