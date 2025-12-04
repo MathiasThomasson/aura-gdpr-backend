@@ -12,6 +12,7 @@ RateLimitedCallable = Callable[..., Awaitable]
 _lock = asyncio.Lock()
 _state: dict[str, OrderedDict[str, list[float]]] = {}
 _MAX_IPS_PER_SCOPE = 10000
+_HEALTH_PATHS = {"/api/system/ping", "/api/system/health", "/api/health"}
 
 
 def _client_ip(request: Request) -> str:
@@ -55,6 +56,8 @@ def rate_limit(scope: str, *, limit: int, window_seconds: int = 60) -> Callable[
                         break
             if request is None:
                 raise RuntimeError("rate_limit decorator requires a Request argument")
+            if request.url.path in _HEALTH_PATHS:
+                return await func(*args, **kwargs)
             await _enforce(scope, limit, window_seconds, request)
             return await func(*args, **kwargs)
 
@@ -67,6 +70,8 @@ def rate_limit_dependency(scope: str, *, limit: int, window_seconds: int = 60) -
     """Dependency-friendly variant."""
 
     async def dependency(request: Request) -> None:
+        if request.url.path in _HEALTH_PATHS:
+            return
         await _enforce(scope, limit, window_seconds, request)
 
     return dependency
