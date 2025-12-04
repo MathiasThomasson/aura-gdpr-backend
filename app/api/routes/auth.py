@@ -1,5 +1,8 @@
-from fastapi import APIRouter, Depends, Request
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.audit import log_event
 from app.core.auth import get_current_user
@@ -23,6 +26,7 @@ from app.services.auth_service import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
+logger = logging.getLogger("app.auth")
 
 
 @router.post("/register", summary="Register user", description="Create a new user within a tenant.")
@@ -41,7 +45,17 @@ async def register(user_data: RegisterRequest, request: Request, db: AsyncSessio
 @router.post("/login", response_model=TokenPair, summary="Login", description="Exchange credentials for access and refresh tokens.")
 @rate_limit("global", limit=100, window_seconds=60)
 async def login(user_data: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    user, access_token, rt = await login_user(db, user_data)
+    try:
+        user, access_token, rt = await login_user(db, user_data)
+    except HTTPException:
+        raise
+    except SQLAlchemyError as exc:
+        logger.error("Login failed due to DB error", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"DB error: {exc}") from exc
+    except Exception as exc:
+        logger.error("Unexpected error during login", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
+
     await log_event(db, user.tenant_id, user.id, "user", user.id, "login", None)
     request.state.user_id = user.id
     request.state.tenant_id = user.tenant_id
